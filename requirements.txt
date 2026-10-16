@@ -1,0 +1,4 @@
+PySide6-Essentials>=6.5
+requests>=2.28
+# optional: embedded GOG login page
+# PySide6-Addons>=6.5

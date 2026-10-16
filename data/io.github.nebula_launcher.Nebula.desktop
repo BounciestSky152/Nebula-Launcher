@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Nebula
+GenericName=Game Launcher
+Comment=All your games in one library - GOG, Steam, Epic, Lutris - with Proton for Windows games
+Exec=nebula %U
+Icon=io.github.nebula_launcher.Nebula
+Terminal=false
+Categories=Game;
+Keywords=games;launcher;gog;galaxy;steam;epic;proton;wine;
+StartupWMClass=nebula
+Actions=Minimized;
+
+[Desktop Action Minimized]
+Name=Start in the tray
+Exec=nebula --minimized

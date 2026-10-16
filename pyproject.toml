@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nebula-launcher"
+version = "1.0.0"
+description = "A unified game launcher for Linux inspired by GOG Galaxy 2.0, with Proton for Windows games"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6-Essentials>=6.5",
+    "requests>=2.28",
+]
+keywords = ["games", "launcher", "gog", "proton", "steam", "linux"]
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Games/Entertainment",
+]
+
+[project.optional-dependencies]
+# embedded GOG sign-in page (otherwise you paste the login URL from your browser)
+webengine = ["PySide6-Addons>=6.5"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+nebula = "nebula.main:main"
+
+[tool.setuptools.packages.find]
+include = ["nebula*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
