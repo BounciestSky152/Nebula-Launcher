@@ -54,11 +54,17 @@ class StoreModel(QAbstractListModel):
 
 class StoreDelegate(QStyledItemDelegate):
     W, H = 300, 169
+    MIN_W, MAX_W = 260, 400
 
     def __init__(self, page, view):
         super().__init__(view)
         self.page = page
         self.view = view
+
+    def set_width(self, w: int) -> None:
+        """Cards scale with the view so columns fill the page instead of floating in wide cells."""
+        self.W = max(self.MIN_W, min(self.MAX_W, w))
+        self.H = self.W * 169 // 300
 
     def sizeHint(self, option, index):  # noqa: N802
         return QSize(self.W + 20, self.H + 66)
@@ -172,10 +178,38 @@ class StoreGrid(QListView):
 
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)
-        base = self.itemDelegate().sizeHint(None, QModelIndex())
-        avail = max(base.width(), self.viewport().width() - 2)
-        cols = max(1, avail // base.width())
-        self.setGridSize(QSize(avail // cols, base.height()))
+        d = self.itemDelegate()
+        avail = max(d.MIN_W + 20, self.viewport().width() - 2)
+        cols = max(1, avail // (d.MIN_W + 20))
+        cell = avail // cols
+        d.set_width(cell - 20)
+        self.setGridSize(QSize(cell, d.sizeHint(None, QModelIndex()).height()))
+
+
+class StoreRow(StoreGrid):
+    """One horizontally scrolling row of store products (used on Home)."""
+
+    def __init__(self, page):
+        super().__init__(page)
+        self.setFlow(QListView.Flow.LeftToRight)
+        self.setWrapping(False)
+        self.setResizeMode(QListView.ResizeMode.Fixed)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        h = self.itemDelegate().sizeHint(None, QModelIndex()).height()
+        self.setFixedHeight(h + 16)
+
+    def resizeEvent(self, e):  # noqa: N802
+        QListView.resizeEvent(self, e)
+        self.setGridSize(self.itemDelegate().sizeHint(None, QModelIndex()))
+
+    def wheelEvent(self, e):  # noqa: N802
+        bar = self.horizontalScrollBar()
+        if bar.maximum() > 0 and abs(e.angleDelta().y()) > abs(e.angleDelta().x()):
+            bar.setValue(bar.value() - e.angleDelta().y())
+            e.accept()
+        else:
+            super().wheelEvent(e)
 
 
 class StorePage(Page):

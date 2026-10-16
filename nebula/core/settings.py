@@ -72,6 +72,16 @@ DEFAULTS: dict[str, Any] = {
     # Friends
     "friends.poll_minutes": 2,
     "friends.notify_playing": True,
+    # Nebula self-updates (from GitHub)
+    "updates.auto_check": True,
+    "updates.auto_install": True,
+    "updates.auto_restart": True,
+    "updates.interval_minutes": 30,
+    "updates.repo": "BounciestSky152/Nebula-Launcher",
+    "updates.branch": "main",
+    # Appearance
+    "appearance.starfield": True,
+    "appearance.animate_stars": True,
     # Window state
     "window.geometry": "",
     "window.friends_open": False,

@@ -10,6 +10,7 @@ import pytest
 # isolate every test session from the real user configuration
 os.environ["NEBULA_HOME"] = tempfile.mkdtemp(prefix="nebula-test-")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ["NEBULA_NO_UPDATE"] = "1"  # never self-update while testing
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 

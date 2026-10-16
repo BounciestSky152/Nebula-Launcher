@@ -21,6 +21,11 @@ SUCCESS = "#4fbf73"
 WARNING = "#e3a63b"
 DANGER = "#e25c5c"
 INFO = "#4aa3df"
+# translucent "glass" surfaces that let the starfield show through
+GLASS = "rgba(12, 10, 24, 0.55)"
+GLASS_DARK = "rgba(8, 7, 18, 0.72)"
+GLASS_CARD = "rgba(28, 26, 44, 0.72)"
+GLASS_BORDER = "rgba(160, 140, 255, 0.14)"
 
 QSS = f"""
 * {{
@@ -30,8 +35,11 @@ QWidget {{
     color: {TEXT};
     font-size: 10pt;
 }}
-QMainWindow, #Page, #ContentArea, QStackedWidget#Pages {{
+QMainWindow {{
     background: {BG};
+}}
+#Page, #ContentArea, QStackedWidget#Pages, #Central {{
+    background: transparent;
 }}
 QScrollArea, QScrollArea > QWidget > QWidget {{
     background: transparent;
@@ -46,8 +54,19 @@ QToolTip {{
 }}
 /* ---------------- sidebar ---------------- */
 #Sidebar {{
-    background: {SIDEBAR};
-    border-right: 1px solid {BORDER};
+    background: {GLASS_DARK};
+    border-right: 1px solid {GLASS_BORDER};
+}}
+#Brand {{
+    font-size: 15pt;
+    font-weight: 800;
+    letter-spacing: 3px;
+}}
+#BrandSub {{
+    color: {ACCENT_HOVER};
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 2px;
 }}
 #SidebarSection {{
     color: {TEXT_FAINT};
@@ -83,8 +102,49 @@ QPushButton#SidebarButton:checked {{
 }}
 /* ---------------- top bar ---------------- */
 #TopBar {{
-    background: {BG};
-    border-bottom: 1px solid {BORDER};
+    background: {GLASS};
+    border-bottom: 1px solid {GLASS_BORDER};
+}}
+#UpdateBanner {{
+    background: rgba(143, 94, 240, 0.22);
+    border-bottom: 1px solid rgba(163, 120, 255, 0.45);
+}}
+QPushButton#GogSignIn {{
+    background: {ACCENT};
+    border: none;
+    border-radius: 16px;
+    color: white;
+    font-weight: 700;
+    padding: 6px 16px;
+}}
+QPushButton#GogSignIn:hover {{ background: {ACCENT_HOVER}; }}
+QPushButton#AvatarButton {{
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 18px;
+    padding: 2px 10px 2px 2px;
+    text-align: left;
+}}
+QPushButton#AvatarButton:hover {{ background: {SURFACE2}; border-color: {BORDER}; }}
+QPushButton#AvatarButton::menu-indicator {{ image: none; }}
+#DrmFree {{
+    background: rgba(79, 191, 115, 0.18);
+    color: {SUCCESS};
+    border: 1px solid rgba(79, 191, 115, 0.5);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 8pt;
+    font-weight: 800;
+    letter-spacing: 1px;
+}}
+#FeatureChip {{
+    background: rgba(255, 255, 255, 0.06);
+    color: {TEXT_DIM};
+    border: 1px solid {GLASS_BORDER};
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 8pt;
+    font-weight: 600;
 }}
 QLineEdit#SearchBox {{
     background: {SURFACE};
@@ -287,7 +347,7 @@ QTableView::item {{
     border-bottom: 1px solid {BORDER};
 }}
 QHeaderView::section {{
-    background: {BG};
+    background: {GLASS_DARK};
     color: {TEXT_FAINT};
     border: none;
     border-bottom: 1px solid {BORDER};
@@ -375,8 +435,8 @@ QMenu::separator {{
 QMenu::icon {{ padding-left: 8px; }}
 /* ---------------- cards & labels ---------------- */
 #Card {{
-    background: {SURFACE};
-    border: 1px solid {BORDER};
+    background: {GLASS_CARD};
+    border: 1px solid {GLASS_BORDER};
     border-radius: 10px;
 }}
 #PageTitle {{

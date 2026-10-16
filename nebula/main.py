@@ -34,6 +34,8 @@ def _parse(argv):
     p.add_argument("--launch", metavar="UID", help="launch a game by id, e.g. gog:1207658924 or steam:620")
     p.add_argument("--minimized", action="store_true", help="start hidden in the system tray")
     p.add_argument("--debug", action="store_true", help="verbose logging")
+    p.add_argument("--no-update", action="store_true", help="don't check GitHub for Nebula updates this session")
+    p.add_argument("--after-update", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     return p.parse_args(argv)
 
@@ -63,6 +65,8 @@ def main(argv=None) -> int:
     QCoreApplication.setApplicationName("nebula")
     QCoreApplication.setOrganizationName("nebula")
     QGuiApplication.setDesktopFileName(APP_ID)
+    # needed by the optional embedded GOG login (QtWebEngine) and harmless otherwise
+    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv[:1])
     app.setApplicationDisplayName(APP_NAME)
     app.setQuitOnLastWindowClosed(False)
@@ -78,13 +82,35 @@ def main(argv=None) -> int:
     from nebula.ui import icons, theme
     from nebula.ui.main_window import MainWindow
 
+    from nebula.updater import preload_modules, restart_command
+
     tasks.init_main_thread()
+    # load every module now: a self-update replaces files on disk and must never be half-loaded
+    preload_modules()
     theme.apply(app)
     app.setWindowIcon(icons.app_icon())
+    if args.no_update:
+        os.environ["NEBULA_NO_UPDATE"] = "1"
     services = Services()
+    server = QLocalServer()
+
+    def restart():
+        """Re-exec the (updated) app with the same arguments."""
+        logging.getLogger(__name__).info("Restarting into the updated version")
+        services.settings.set("window.geometry", bytes(window.saveGeometry().toBase64()).decode())
+        services.shutdown()
+        server.close()
+        QLocalServer.removeServer(SOCKET_NAME)
+        logging.shutdown()
+        env = os.environ.copy()
+        root = str(paths_root())
+        env["PYTHONPATH"] = root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        cmd = restart_command()
+        os.execve(cmd[0], cmd, env)
+
+    services.self_update.restart_cb = restart
     window = MainWindow(services)
 
-    server = QLocalServer()
     QLocalServer.removeServer(SOCKET_NAME)
     server.listen(SOCKET_NAME)
 
@@ -105,7 +131,13 @@ def main(argv=None) -> int:
     server.newConnection.connect(on_connection)
 
     services.start()
-    window.navigate("home")
+    services.self_update.start()
+    window.start_page()
+    if args.after_update:
+        last = services.self_update.state().get("last_update") or {}
+        commits = [m for _sha, m in last.get("commits", [])][:3]
+        QTimer.singleShot(1200, lambda: window.toast("Nebula was updated",
+                                                     "\n".join(commits) or "You're on the latest version"))
     if args.minimized or services.settings.get("general.start_minimized"):
         if window.tray is None or not window.tray.isVisible():
             window.showMinimized()
@@ -123,6 +155,13 @@ def main(argv=None) -> int:
     services.shutdown()
     server.close()
     return code
+
+
+def paths_root():
+    """Folder that contains the ``nebula`` package (kept on PYTHONPATH across restarts)."""
+    from pathlib import Path
+
+    return Path(__file__).resolve().parent.parent
 
 
 if __name__ == "__main__":

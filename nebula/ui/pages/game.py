@@ -70,6 +70,7 @@ class GamePage(Page):
         self.area = QScrollArea()
         self.area.setWidgetResizable(True)
         self.area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.area.setFrameShape(QScrollArea.Shape.NoFrame)
         outer.addWidget(self.area)
         content = QWidget()
         content.setObjectName("ContentArea")
@@ -94,6 +95,10 @@ class GamePage(Page):
         prow.addWidget(self.badges)
         self.owned_on = label("", "Subtle")
         prow.addWidget(self.owned_on)
+        prow.addSpacing(10)
+        self.chips = QHBoxLayout()
+        self.chips.setSpacing(6)
+        prow.addLayout(self.chips)
         prow.addStretch(1)
         hl.addLayout(prow)
         hl.addSpacing(14)
@@ -159,10 +164,6 @@ class GamePage(Page):
             self.more.mapToGlobal(self.more.rect().bottomLeft())))
         actions.addWidget(self.more)
         actions.addStretch(1)
-        actions.addWidget(label("Your rating  ", "Faint"))
-        self.rating = StarRating(20)
-        self.rating.changed.connect(lambda v: self.ctl.set_rating(self.key, v))
-        actions.addWidget(self.rating)
         hl.addLayout(actions)
         col.addWidget(self.hero)
 
@@ -177,6 +178,14 @@ class GamePage(Page):
         for s in (self.st_last, self.st_time, self.st_ach, self.st_run, self.st_size):
             stats.addWidget(s, 0, Qt.AlignmentFlag.AlignTop)
         stats.addStretch(1)
+        rate = QVBoxLayout()
+        rate.setSpacing(6)
+        rate.addWidget(label("YOUR RATING", "StatLabel"))
+        self.rating = StarRating(20)
+        self.rating.changed.connect(lambda v: self.ctl.set_rating(self.key, v))
+        rate.addWidget(self.rating)
+        rate.addStretch(1)
+        stats.addLayout(rate)
         col.addLayout(stats)
 
         # ------------------------------------------------------------ tabs
@@ -255,6 +264,32 @@ class GamePage(Page):
         top.addLayout(left, 3)
         right = QVBoxLayout()
         right.setSpacing(12)
+        # games owned elsewhere: offer the DRM-free GOG version
+        self.gog_offer = card()
+        self.gog_offer.setObjectName("GogOffer")
+        gl = QVBoxLayout(self.gog_offer)
+        gl.setContentsMargins(16, 14, 16, 14)
+        gl.setSpacing(8)
+        gh = QHBoxLayout()
+        gb = label()
+        gb.setPixmap(icons.badge("G", theme.ACCENT, 22))
+        gh.addWidget(gb)
+        gh.addWidget(label("Also on GOG.COM", "SectionTitle"), 1)
+        gh.addWidget(label("DRM-FREE", "DrmFree"))
+        gl.addLayout(gh)
+        self.gog_offer_text = label("", "Subtle", wrap=True)
+        gl.addWidget(self.gog_offer_text)
+        orow = QHBoxLayout()
+        self.gog_offer_price = label("", "SectionTitle")
+        orow.addWidget(self.gog_offer_price)
+        orow.addStretch(1)
+        self.gog_offer_btn = button("View on GOG", "store", primary=True)
+        self.gog_offer_btn.clicked.connect(lambda: self._gog_item and self.win.navigate("product", self._gog_item))
+        orow.addWidget(self.gog_offer_btn)
+        gl.addLayout(orow)
+        self._gog_item = None
+        self.gog_offer.hide()
+        right.addWidget(self.gog_offer)
         tags_card = card()
         tcl = QVBoxLayout(tags_card)
         tcl.setContentsMargins(16, 14, 16, 14)
@@ -360,6 +395,7 @@ class GamePage(Page):
         self.area.verticalScrollBar().setValue(0)
         self._refresh_header()
         self._load_details()
+        self._load_gog_offer()
         if self.tabs.currentIndex() == 1:
             self._load_achievements()
 
@@ -392,6 +428,7 @@ class GamePage(Page):
         self.badges.set_sources(e.sources, self.s.integrations)
         names = [self.s.integrations[s].name for s in e.sources if s in self.s.integrations]
         self.owned_on.setText("  " + ", ".join(names))
+        self._render_chips(e)
         self.fav.setChecked(e.user.favorite)
         self.fav.setIcon(icons.icon("heart", theme.DANGER if e.user.favorite else theme.TEXT_DIM))
         self.rating.set_value(e.user.rating)
@@ -408,6 +445,7 @@ class GamePage(Page):
             self.st_ach.set("—")
             self.st_ach.bar.hide()
         inst = self.ctl.installed_game(e)
+        self.st_run.sub.setStyleSheet("")
         if inst:
             if inst.platform == "windows" and inst.source not in ("steam", "lutris"):
                 cfg = self.s.db.get_config(inst.uid)
@@ -435,6 +473,51 @@ class GamePage(Page):
         self._render_overview_local()
         self._render_activity()
         self._render_info()
+
+    def _render_chips(self, e) -> None:
+        clear_layout(self.chips)
+        chips = []
+        if "gog" in e.sources:
+            chips.append(("DRM-FREE", "DrmFree"))
+        if any("linux" in (g.os_support or []) or g.platform == "linux" for g in e.games):
+            chips.append(("Linux native", "FeatureChip"))
+        elif any("windows" in (g.os_support or []) or g.platform == "windows" for g in e.games):
+            chips.append(("Windows • runs with Proton", "FeatureChip"))
+        if e.achievements[1]:
+            chips.append(("Achievements", "FeatureChip"))
+        if "gog" in e.sources and self.s.integration("gog").supports(base.CLOUD_SAVES) and \
+                any(g.source == "gog" and g.installed for g in e.games):
+            chips.append(("Cloud saves", "FeatureChip"))
+        dlc = max((g.extra.get("dlc_count", 0) or 0 for g in e.games), default=0)
+        if dlc:
+            chips.append((f"{dlc} DLC", "FeatureChip"))
+        for text, obj in chips:
+            self.chips.addWidget(label(text, obj))
+
+    def _load_gog_offer(self) -> None:
+        """For games owned elsewhere, look the title up on GOG and offer the DRM-free version."""
+        e = self.entry
+        gog = self.s.integrations.get("gog")
+        self._gog_item = None
+        self.gog_offer.hide()
+        if not e or gog is None or "gog" in e.sources:
+            return
+        key, title = self.key, e.title
+
+        def done(item) -> None:
+            if not item or self.key != key:
+                return
+            self._gog_item = item
+            price = item.get("price") or {}
+            text = price.get("final") or ""
+            if price.get("discount"):
+                text = f"<span style='color:{theme.SUCCESS}'>{price['discount']}</span>  {text}"
+            self.gog_offer_price.setText(text)
+            self.gog_offer_text.setText(f"Get {item.get('title', title)} on GOG: no DRM, offline installers, "
+                                        "cloud saves and roll-backs, installed right here.")
+            self.gog_offer.show()
+
+        tasks.run_async(gog.find_in_store, title, on_done=done, on_error=lambda _e: None)
 
     def _refresh_actions(self) -> None:
         e = self.entry

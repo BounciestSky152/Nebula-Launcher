@@ -215,10 +215,20 @@ class UiController:
             self.s.actions.import_folder(d, on_done=lambda games: self.w.toast(
                 "Scan complete", f"Imported {len(games)} installed game(s)" if games else "No GOG games found there"))
 
-    def gog_login(self) -> None:
+    def gog_login(self) -> bool:
         from nebula.ui.dialogs.login import GogLoginDialog
 
-        GogLoginDialog(self.s, self.w).exec()
+        ok = bool(GogLoginDialog(self.s, self.w).exec())
+        if ok:
+            self.w.toast("Signed in to GOG", "Syncing your GOG library\u2026")
+        return ok
+
+    def gog_logout(self) -> None:
+        if QMessageBox.question(self.w, "Sign out", "Sign out of GOG? Installed games stay installed.") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        tasks.run_async(self.s.integrations["gog"].disconnect,
+                        on_done=lambda _r: self.s.bus.integration_changed.emit("gog"))
 
     def proton_download(self) -> None:
         from nebula.ui.dialogs.misc import ProtonDialog

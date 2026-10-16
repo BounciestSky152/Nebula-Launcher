@@ -1,16 +1,37 @@
 # Nebula — a GOG Galaxy-style launcher for Linux
 
-Nebula puts all your games in one library: **GOG**, **Steam**, **Epic Games** (through Legendary/Heroic),
-**Lutris**, games you add yourself, and anything a plugin provides. Its interface and features are modelled on
-GOG Galaxy 2.0. **Every Windows-only game runs through Proton automatically.**
+Nebula is a GOG launcher first. Sign in with GOG and your GOG library, the GOG store, your wishlist, cloud saves,
+achievements and GOG friends sit at the centre of the app, the way they do in GOG Galaxy 2.0. Your **Steam**,
+**Epic Games** (through Legendary/Heroic), **Lutris** and hand-added games join the same library alongside them.
+**Every Windows-only game runs through Proton automatically.** Nebula also **updates itself from GitHub**.
 
-![Library](docs/screenshots/library.png)
+![Home](docs/screenshots/home.png)
 
 | | |
 |---|---|
-| ![Recent](docs/screenshots/home.png) | ![Game page](docs/screenshots/game.png) |
-| ![Downloads](docs/screenshots/downloads.png) | ![Proton settings](docs/screenshots/proton-settings.png) |
-| ![Store](docs/screenshots/store.png) | ![Statistics](docs/screenshots/statistics.png) |
+| ![Sign in with GOG](docs/screenshots/welcome.png) | ![Library](docs/screenshots/library.png) |
+| ![GOG game page](docs/screenshots/game.png) | ![DRM-free offer for a Steam game](docs/screenshots/game-drm-free.png) |
+| ![GOG store](docs/screenshots/store.png) | ![Downloads](docs/screenshots/downloads.png) |
+| ![Proton settings](docs/screenshots/proton-settings.png) | ![Statistics](docs/screenshots/statistics.png) |
+
+## Built around GOG
+
+* **Sign in with GOG first.** The first time Nebula starts it shows a GOG sign-in screen. You can skip it and
+  sign in later from the top bar.
+* **The sidebar starts with GOG.COM:** Home, Store, Wishlist and *My GOG games*. After that come your whole
+  library (all games, installed, favourites, updates), then other platforms, your saved views and activity.
+* **The top bar works like Galaxy's.** It has back/forward, one search box for your games and the GOG store,
+  sync, downloads and friends. Your GOG avatar opens your profile, wishlist and account settings, and lets you
+  sign out.
+* **Home is GOG-centred.** It shows a featured GOG deal, *Continue playing*, *On sale on GOG*, *From your
+  wishlist*, updates, your GOG games, recent additions, your week, friends playing now and recent activity.
+* **Game pages show what GOG gives you:** a **DRM-FREE** badge plus Linux-native/Proton, achievements, cloud
+  saves and DLC chips. For games you only own on Steam, Epic or elsewhere, an **Also on GOG.COM** card shows the
+  DRM-free version with its current price.
+* **A starfield sits behind the whole window.** Glass panels let the night sky show through. A few stars twinkle
+  and the odd shooting star crosses the sky, but only those few pixels are redrawn, and the animation stops
+  while a game is running or the window is minimised. You can turn the stars, or just their animation, off in
+  Settings › General › Appearance.
 
 ## Proton: Windows games just work
 
@@ -43,9 +64,9 @@ GOG Galaxy 2.0. **Every Windows-only game runs through Proton automatically.**
 | Same game owned on several platforms merged into one entry | ✅ pick the preferred platform per game |
 | Grid and list views, cover size, sorting | ✅ |
 | Filters: platform, installed, OS, genre, tags, played, favourites, updates, hidden | ✅ with removable filter chips |
-| Custom views saved in the sidebar | ✅ |
+| Custom views saved in the sidebar | ✅ *Filters › Save as view* |
 | Tags, star rating, favourites, hide game, rename, custom covers | ✅ |
-| "Recent" home: continue playing, updates, recently added, your week, activity | ✅ |
+| Home: continue playing, GOG deals, wishlist, updates, recently added, your week, friends, activity | ✅ |
 | Game page: hero art, description, screenshots, trailers, info, links, changelog | ✅ |
 | Install GOG games | ✅ Galaxy content system (generation 2) for Windows builds, native `.sh` installers for Linux builds |
 | Choose language, DLC, version and location at install time | ✅ |
@@ -74,6 +95,50 @@ GOG Galaxy 2.0. **Every Windows-only game runs through Proton automatically.**
 | Chat | ❌ GOG has no public chat API |
 | PlayStation, Xbox, Battle.net, Ubisoft, EA | ⚠️ through Lutris (installed games) or a plugin |
 
+## Automatic updates from GitHub
+
+Nebula checks [BounciestSky152/Nebula-Launcher](https://github.com/BounciestSky152/Nebula-Launcher) for new
+commits every 30 minutes (and 20 seconds after start-up). It only updates when **files the app actually runs**
+have changed:
+
+* **Runtime files** are everything in the `nebula/` package, plus `pyproject.toml` because it lists the
+  dependencies.
+* **Ignored files** include `README.md`, `docs/` and screenshots, `tests/`, `scripts/`, CI settings and
+  `__pycache__`. A commit that only touches these never triggers an update, a download or a restart.
+
+Nebula decides this by comparing the git blob hashes of your installed files with the tree of the latest commit
+on GitHub. It doesn't need to know which version you started from, and it only reports a file that really
+differs.
+
+How an update is installed depends on how you installed Nebula:
+
+| Install type | What the updater does |
+|---|---|
+| Git checkout (`git clone` + `python -m nebula`) | `git fetch` + fast-forward merge. It refuses to touch a checkout with local edits or diverged history. |
+| `scripts/install.sh` / pip in a virtual environment | Downloads the commit's source tarball, checks **every runtime file against GitHub's hashes**, then runs `pip install --upgrade` (`--no-deps` unless `pyproject.toml` changed). |
+| Plain copy of the source | Replaces changed files, adds new ones and removes deleted ones, all verified the same way. |
+| Read-only (system package) | Tells you an update exists and links to GitHub. |
+
+Safety:
+
+* Every Nebula module is loaded at start-up, so swapping files on disk can't leave a half-updated program
+  running.
+* An update that arrives while a game is running or a download is active waits until they finish.
+* After installing, a banner offers *Restart now*, or Nebula restarts on its own after 20 seconds once nothing is
+  running. Games and downloads are never interrupted.
+* A note after the restart lists the commits that were applied.
+
+Settings › Updates shows the version and commit, the install type and status, and a *Check for updates now*
+button. It also has switches for automatic checking, installing and restarting, plus the check interval and the
+repository/branch to follow. Start with `nebula --no-update` (or set `NEBULA_NO_UPDATE=1`) to turn the updater
+off for one session.
+
+The updater only contacts GitHub. Checking for a new commit uses a conditional request that doesn't count
+against GitHub's API rate limit, and if the limit is reached anyway it falls back to the git protocol. The file
+list and the tarball are fetched only when there really is a new commit.
+
+![Updates settings](docs/screenshots/updates.png)
+
 ## Install
 
 You need Python 3.10 or newer. Then:
@@ -97,7 +162,7 @@ Recommended system packages (all optional): `umu-launcher`, `gamemode`, `mangohu
 
 ## Connecting platforms
 
-* **GOG:** click your profile, then *Sign in to GOG*. With PySide6-Addons the login page opens inside Nebula.
+* **GOG:** use the welcome screen, or *Sign in with GOG* in the top bar. With PySide6-Addons the login page opens inside Nebula.
   Without it, Nebula opens your browser and you paste the final `on_login_success` address back.
 * **Steam:** installed games, play time and artwork are read from your local Steam folder. For games you own but
   haven't installed, plus achievements and friends, add a
@@ -114,6 +179,7 @@ nebula                       start, or bring the running window to front
 nebula --launch gog:1207658924   launch a game (used by desktop shortcuts)
 nebula --minimized           start in the tray
 nebula --debug               verbose logging (~/.local/share/nebula/logs)
+nebula --no-update           don't check GitHub for Nebula updates this session
 ```
 
 Keyboard shortcuts:
@@ -123,7 +189,7 @@ Keyboard shortcuts:
 | Ctrl+F | Search |
 | Alt+← / Alt+→ | Back / forward |
 | F5 or Ctrl+R | Sync all platforms |
-| Ctrl+1 … Ctrl+5 | Recent, Owned, Installed, Store, Downloads |
+| Ctrl+1 … Ctrl+5 | Home, All games, Installed, Store, Downloads |
 | Ctrl+, | Settings |
 
 ## Plugins
@@ -139,7 +205,7 @@ Drop a `.py` file into `~/.local/share/nebula/plugins/` and restart Nebula. Any 
 | Path | Contents |
 |---|---|
 | `~/.config/nebula/` | settings, GOG credentials (mode 600) |
-| `~/.local/share/nebula/` | library database, Proton prefixes, downloaded Proton/umu, GOG manifests, redistributables, logs |
+| `~/.local/share/nebula/` | library database, Proton prefixes, downloaded Proton/umu, GOG manifests, redistributables, logs, `update-state.json` |
 | `~/.cache/nebula/` | artwork cache, partially downloaded installers |
 | `~/Games/Nebula/` | default install folder (change it in Settings › Library) |
 
@@ -159,13 +225,19 @@ these fake servers:
 * Proton/umu command lines;
 * GE-Proton download and checksum verification;
 * the Steam, Epic, Lutris and Linux-installer importers, process detection and the job queue;
-* a smoke test that opens every page and dialog.
+* the self-updater, against a fake GitHub API/codeload and a local git remote. It covers docs-only commits
+  being ignored, runtime changes being applied, tampered downloads being rejected, the git fallback when the
+  API is rate-limited, pip/git/file install modes, and local edits blocking an update;
+* a smoke test that opens every page and dialog, plus checks of the GOG welcome flow, the DRM-free offer, the
+  update banner, and that a restart never happens while a game is running.
 
 Code layout:
 
 ```
 nebula/
-  core/          settings, SQLite storage, library merging, job queue, launcher and session tracking, images
+  updater.py     self-updater: GitHub tree comparison, verified download, git/pip/file installs
+  core/          settings, SQLite storage, library merging, job queue, launcher and session tracking, images,
+                 self_update (schedules checks, waits for games, restarts)
   runners/       Proton/Wine detection and command building, GE-Proton and umu downloads
   integrations/  gog/ (auth, API, Galaxy content system, offline installers, cloud saves), steam, epic, lutris, local
   ui/            PySide6 interface: shell, pages, dialogs, widgets, theme

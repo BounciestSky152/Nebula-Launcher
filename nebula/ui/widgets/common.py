@@ -162,16 +162,27 @@ class RemoteImage(QWidget):
 
 
 class HeroBanner(RemoteImage):
-    """Wide background image fading into the page background."""
+    """Wide artwork that dissolves into the starfield behind it."""
 
     def __init__(self, height: int = 380, parent=None):
         super().__init__(None, radius=0, parent=parent)
         self.setFixedHeight(height)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._composed: QPixmap | None = None
+        self._composed_key: tuple | None = None
 
-    def paintEvent(self, e):  # noqa: N802
-        p = QPainter(self)
-        r = QRectF(self.rect())
+    def _compose(self) -> QPixmap:
+        """Artwork with an alpha fade (cached: twinkling stars repaint this area often)."""
+        dpr = self.devicePixelRatioF() or 1.0
+        key = (self.width(), self.height(), dpr, self._pm.cacheKey() if self._pm is not None else self._title)
+        if self._composed is not None and self._composed_key == key:
+            return self._composed
+        w, h = max(1, self.width()), max(1, self.height())
+        out = QPixmap(int(w * dpr), int(h * dpr))
+        out.setDevicePixelRatio(dpr)
+        out.fill(Qt.GlobalColor.transparent)
+        p = QPainter(out)
+        r = QRectF(0, 0, w, h)
         if self._pm is not None and not self._pm.isNull():
             pm = self._pm
             pr = pm.width() / max(1, pm.height())
@@ -185,21 +196,31 @@ class HeroBanner(RemoteImage):
             p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
             p.drawPixmap(r, pm, src)
         else:
-            h = sum(ord(c) for c in self._title or "x")
+            hh = sum(ord(c) for c in self._title or "x")
             g = QLinearGradient(0, 0, r.width(), r.height())
-            g.setColorAt(0, QColor.fromHsl(h % 360, 60, 40))
-            g.setColorAt(1, QColor(theme.BG))
+            g.setColorAt(0, QColor.fromHsl(hh % 360, 70, 60, 160))
+            g.setColorAt(1, QColor(0, 0, 0, 0))
             p.fillRect(r, g)
-        fade = QLinearGradient(0, 0, 0, r.height())
-        bg = QColor(theme.BG)
-        fade.setColorAt(0.0, QColor(bg.red(), bg.green(), bg.blue(), 40))
-        fade.setColorAt(0.55, QColor(bg.red(), bg.green(), bg.blue(), 120))
-        fade.setColorAt(1.0, bg)
-        p.fillRect(r, fade)
-        side = QLinearGradient(0, 0, r.width(), 0)
-        side.setColorAt(0, QColor(bg.red(), bg.green(), bg.blue(), 170))
-        side.setColorAt(0.5, QColor(bg.red(), bg.green(), bg.blue(), 0))
+        # dissolve the artwork towards the bottom so the stars show through
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+        mask = QLinearGradient(0, 0, 0, h)
+        mask.setColorAt(0.0, QColor(0, 0, 0, 235))
+        mask.setColorAt(0.55, QColor(0, 0, 0, 170))
+        mask.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.fillRect(r, mask)
+        # darken the left side for title/button contrast
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        side = QLinearGradient(0, 0, w, 0)
+        side.setColorAt(0, QColor(6, 6, 16, 150))
+        side.setColorAt(0.55, QColor(6, 6, 16, 0))
         p.fillRect(r, side)
+        p.end()
+        self._composed, self._composed_key = out, key
+        return out
+
+    def paintEvent(self, e):  # noqa: N802
+        p = QPainter(self)
+        p.drawPixmap(0, 0, self._compose())
 
     def _load(self) -> None:
         if not self._urls:

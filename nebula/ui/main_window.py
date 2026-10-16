@@ -8,7 +8,7 @@ import subprocess
 from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QMenu, QStackedWidget, QSystemTrayIcon, \
-    QVBoxLayout, QWidget
+    QVBoxLayout
 
 from nebula import APP_NAME
 from nebula.ui import icons
@@ -21,8 +21,11 @@ from nebula.ui.pages.library import LibraryPage
 from nebula.ui.pages.settings import SettingsPage
 from nebula.ui.pages.stats import StatsPage
 from nebula.ui.pages.store import ProductPage, StorePage
+from nebula.ui.pages.welcome import WelcomePage
 from nebula.ui.shell import Sidebar, TopBar
 from nebula.ui.widgets.common import ToastHost
+from nebula.ui.widgets.starfield import Starfield
+from nebula.ui.widgets.update_banner import UpdateBanner
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +43,9 @@ class MainWindow(QMainWindow):
         self.hist_index = -1
         self._quitting = False
 
-        central = QWidget()
+        central = Starfield()
+        central.setObjectName("Central")
+        self.starfield = central
         root = QHBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -49,9 +54,11 @@ class MainWindow(QMainWindow):
         mid = QVBoxLayout()
         mid.setContentsMargins(0, 0, 0, 0)
         mid.setSpacing(0)
-        self.topbar = TopBar(services, self)
+        self.topbar = TopBar(services, self.ctl, self)
         self.topbar.search_submitted.connect(self._search)
         mid.addWidget(self.topbar)
+        self.update_banner = UpdateBanner(services, self)
+        mid.addWidget(self.update_banner)
         self.stack = QStackedWidget()
         self.stack.setObjectName("Pages")
         mid.addWidget(self.stack, 1)
@@ -71,6 +78,7 @@ class MainWindow(QMainWindow):
             "product": ProductPage(services, self.ctl, self),
             "stats": StatsPage(services, self.ctl, self),
             "settings": SettingsPage(services, self.ctl, self),
+            "welcome": WelcomePage(services, self.ctl, self),
         }
         for p in self.pages.values():
             self.stack.addWidget(p)
@@ -83,6 +91,8 @@ class MainWindow(QMainWindow):
         bus.navigate.connect(self.navigate)
         bus.game_started.connect(self._game_started)
         bus.game_stopped.connect(self._game_stopped)
+        services.settings.on_change(self._setting_changed)
+        self.apply_appearance()
         geo = services.settings.get("window.geometry")
         if geo:
             self.restoreGeometry(QByteArray.fromBase64(geo.encode()))
@@ -101,11 +111,33 @@ class MainWindow(QMainWindow):
             if not self.history or self.history[-1] != (page, arg):
                 self.history.append((page, arg))
             self.hist_index = len(self.history) - 1
+        chrome = page != "welcome"
+        self.sidebar.setVisible(chrome)
+        self.topbar.setVisible(chrome)
+        self.friends.setVisible(chrome and bool(self.s.settings.get("window.friends_open")))
         self.stack.setCurrentWidget(w)
         w.on_show(arg)
         self.sidebar.select(page, arg)
         self.topbar.back.setEnabled(self.hist_index > 0)
         self.topbar.fwd.setEnabled(self.hist_index < len(self.history) - 1)
+
+    def start_page(self) -> None:
+        """Galaxy-style start: ask to sign in with GOG first, otherwise open Home."""
+        gog = self.s.integrations.get("gog")
+        if gog and not gog.connected() and not self.s.db.kv_get("ui.welcome_dismissed"):
+            self.navigate("welcome", record=False)
+        else:
+            self.navigate("home")
+
+    def apply_appearance(self) -> None:
+        st = self.s.settings
+        self.starfield.set_stars(bool(st.get("appearance.starfield")))
+        running = bool(self.s.launcher.running)
+        self.starfield.set_animated(bool(st.get("appearance.animate_stars")) and not running)
+
+    def _setting_changed(self, key: str, _value) -> None:
+        if key.startswith("appearance."):
+            self.apply_appearance()
 
     def go_back(self) -> None:
         if self.hist_index > 0:
@@ -181,6 +213,7 @@ class MainWindow(QMainWindow):
 
     # -------------------------------------------------------- game events
     def _game_started(self, uid: str) -> None:
+        self.apply_appearance()  # stop animating the sky while a game runs
         behaviour = self.s.settings.get("general.launch_behaviour")
         st = self.s.launcher.running.get(uid)
         if st and not st.external:
@@ -191,6 +224,7 @@ class MainWindow(QMainWindow):
         self._rebuild_tray_menu()
 
     def _game_stopped(self, uid: str, seconds: int) -> None:
+        self.apply_appearance()
         if self.s.settings.get("general.launch_behaviour") in ("minimize", "hide") and not self.isVisible():
             self.show_window()
         self._rebuild_tray_menu()

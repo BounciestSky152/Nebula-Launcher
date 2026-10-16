@@ -887,6 +887,27 @@ class GogIntegration(Integration):
         kwargs.setdefault("currency", self.settings.get("gog.currency") or "USD")
         return self.api.catalog(**kwargs)
 
+    def find_in_store(self, title: str) -> dict | None:
+        """Look a title up in the GOG catalog (used to offer a DRM-free copy of games owned elsewhere)."""
+        from nebula.core.models import title_key
+
+        key = title_key(title)
+        cache = self.__dict__.setdefault("_store_lookup", {})
+        if key in cache:
+            return cache[key]
+        found = None
+        try:
+            data = self.catalog(query=title, limit=10)
+            for prod in data.get("products", []) or []:
+                if title_key(prod.get("title", "")) == key:
+                    found = prod
+                    break
+        except Exception as exc:  # noqa: BLE001
+            log.debug("store lookup for %s failed: %s", title, exc)
+            return None
+        cache[key] = found
+        return found
+
     def store_product(self, product_id: str) -> dict:
         p = self.api.product(product_id, expand=("description", "screenshots", "videos"))
         p["_description_text"] = strip_html((p.get("description") or {}).get("full") or

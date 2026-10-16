@@ -42,8 +42,9 @@ class SettingsPage(Page):
         self.integrations_w = QWidget()
         self.tabs.addTab(self._scroll(self.integrations_w), "Integrations")
         self._build_integrations()
+        self.tabs.addTab(self._scroll(self._updates()), "Updates")
         self.tabs.addTab(self._scroll(self._about()), "About")
-        services.bus.integration_changed.connect(lambda _i: self._build_integrations())
+        services.bus.integration_changed.connect(lambda _i: (self._build_integrations(), self._refresh_gog_account()))
         services.bus.runners_changed.connect(self._refresh_runners)
         services.bus.sync_state.connect(lambda *_: self._build_integrations() if self.isVisible() else None)
 
@@ -80,6 +81,7 @@ class SettingsPage(Page):
 
     def spin(self, key: str, lo: int, hi: int, suffix: str = "", special: str = "") -> QSpinBox:
         s = QSpinBox()
+        s.setMaximumWidth(180)
         s.setRange(lo, hi)
         s.setValue(int(self.st.get(key) or 0))
         if suffix:
@@ -107,6 +109,27 @@ class SettingsPage(Page):
     # ------------------------------------------------------------ general
     def _general(self) -> QWidget:
         w, lay = self._page()
+        g3, f3 = self.group("GOG account")
+        self.gog_status = label("", "Subtle", wrap=True)
+        self.gog_btn = button("")
+        self.gog_btn.clicked.connect(self._gog_account_action)
+        row = QHBoxLayout()
+        row.addWidget(self.gog_status, 1)
+        row.addWidget(self.gog_btn)
+        f3.addRow(row)
+        f3.addRow(self.check("gog.presence", "Show my online status and current game to GOG friends"))
+        f3.addRow(self.check("gog.sync_playtime", "Report play time to GOG (shown on your GOG profile)"))
+        f3.addRow("Store country", self.combo("gog.country", [(c, c) for c in (
+            "US", "GB", "DE", "FR", "PL", "ES", "IT", "NL", "SE", "CA", "AU", "BR", "JP", "RU", "CN")]))
+        f3.addRow("Store currency", self.combo("gog.currency", [(c, c) for c in (
+            "USD", "EUR", "GBP", "PLN", "CAD", "AUD", "BRL", "JPY", "RUB", "CNY", "SEK")]))
+        lay.addWidget(g3)
+        self._refresh_gog_account()
+        ga, fa = self.group("Appearance")
+        fa.addRow(self.check("appearance.starfield", "Starry sky background"))
+        fa.addRow(self.check("appearance.animate_stars", "Animate the stars (twinkling and shooting stars)"))
+        fa.addRow(label("The animation pauses automatically while a game is running.", "Faint"))
+        lay.addWidget(ga)
         g, f = self.group("Application")
         f.addRow(self.check("general.show_tray", "Show icon in the system tray"))
         f.addRow(self.check("general.close_to_tray", "Closing the window keeps Nebula running in the tray"))
@@ -120,16 +143,105 @@ class SettingsPage(Page):
         f2.addRow("Refresh friends every", self.spin("friends.poll_minutes", 1, 60, " min"))
         f2.addRow(self.check("friends.notify_playing", "Notify me when a friend starts playing"))
         lay.addWidget(g2)
-        g3, f3 = self.group("GOG")
-        f3.addRow(self.check("gog.presence", "Show my online status and current game to GOG friends"))
-        f3.addRow(self.check("gog.sync_playtime", "Report play time to GOG (shown on your GOG profile)"))
-        f3.addRow("Store country", self.combo("gog.country", [(c, c) for c in (
-            "US", "GB", "DE", "FR", "PL", "ES", "IT", "NL", "SE", "CA", "AU", "BR", "JP", "RU", "CN")]))
-        f3.addRow("Store currency", self.combo("gog.currency", [(c, c) for c in (
-            "USD", "EUR", "GBP", "PLN", "CAD", "AUD", "BRL", "JPY", "RUB", "CNY", "SEK")]))
-        lay.addWidget(g3)
         lay.addStretch(1)
         return w
+
+    def _refresh_gog_account(self) -> None:
+        gog = self.s.integrations.get("gog")
+        if gog and gog.connected():
+            self.gog_status.setText(f"Signed in as <b>{gog.account_name() or 'GOG user'}</b>")
+            self.gog_btn.setText("Sign out")
+        else:
+            self.gog_status.setText("Not signed in. Sign in to sync your GOG library, cloud saves, achievements "
+                                    "and friends.")
+            self.gog_btn.setText("Sign in with GOG")
+
+    def _gog_account_action(self) -> None:
+        gog = self.s.integrations.get("gog")
+        if gog and gog.connected():
+            self.ctl.gog_logout()
+        else:
+            self.ctl.gog_login()
+
+    # ------------------------------------------------------------ updates
+    def _updates(self) -> QWidget:
+        from nebula import __version__
+
+        w, lay = self._page()
+        intro = card()
+        il = QVBoxLayout(intro)
+        il.setContentsMargins(16, 14, 16, 14)
+        il.addWidget(label("Nebula keeps itself up to date", "SectionTitle"))
+        il.addWidget(label("New versions are pulled straight from GitHub. Only changes to the files the app actually "
+                           "runs (the nebula package and its dependency list) trigger an update \u2014 edits to the "
+                           "README, docs, screenshots or tests are ignored. Every downloaded file is verified "
+                           "against GitHub's hashes before it is installed, and Nebula never restarts while a game "
+                           "is running or a download is active.", "Subtle", wrap=True))
+        lay.addWidget(intro)
+        g, f = self.group("Status")
+        self.upd_version = label("", selectable=True)
+        f.addRow("Version", self.upd_version)
+        self.upd_mode = label("", "Subtle", wrap=True)
+        f.addRow("Install type", self.upd_mode)
+        self.upd_status = label("", wrap=True)
+        f.addRow("Status", self.upd_status)
+        check = button("Check for updates now", "refresh", primary=True)
+        check.clicked.connect(lambda: self.s.self_update.check(manual=True))
+        r = QHBoxLayout()
+        r.addWidget(check)
+        r.addStretch(1)
+        f.addRow("", r)
+        lay.addWidget(g)
+        g2, f2 = self.group("Automatic updates")
+        f2.addRow(self.check("updates.auto_check", "Check GitHub for new versions automatically"))
+        f2.addRow("Check every", self.spin("updates.interval_minutes", 5, 1440, " min"))
+        f2.addRow(self.check("updates.auto_install", "Install updates automatically"))
+        f2.addRow(self.check("updates.auto_restart", "Restart Nebula automatically after an update (when idle)"))
+        repo = QLineEdit(self.st.get("updates.repo"))
+        repo.editingFinished.connect(lambda: self.st.set("updates.repo", repo.text().strip()))
+        f2.addRow("GitHub repository", repo)
+        branch = QLineEdit(self.st.get("updates.branch"))
+        branch.editingFinished.connect(lambda: self.st.set("updates.branch", branch.text().strip() or "main"))
+        f2.addRow("Branch", branch)
+        lay.addWidget(g2)
+        g3 = QGroupBox("Last update")
+        v3 = QVBoxLayout(g3)
+        self.upd_last = QListWidget()
+        self.upd_last.setMaximumHeight(160)
+        v3.addWidget(self.upd_last)
+        lay.addWidget(g3)
+        lay.addStretch(1)
+        self._version = __version__
+        self.s.self_update.changed.connect(self._refresh_updates)
+        self._refresh_updates()
+        return w
+
+    def _refresh_updates(self) -> None:
+        upd = self.s.self_update
+        sha = upd.installed_sha()
+        self.upd_version.setText(f"Nebula {self._version}" + (f"  \u2022  commit {sha[:7]}" if sha else ""))
+        self.upd_mode.setText({
+            "git": "Git checkout \u2014 updates are fast-forward pulls",
+            "pip": "Installed with scripts/install.sh \u2014 updates reinstall the new source into Nebula's venv",
+            "files": "Source folder \u2014 changed files are replaced in place",
+            "manual": "Read-only installation \u2014 you'll be told when an update exists",
+        }.get(upd.mode(), upd.mode()))
+        state = upd.state()
+        checked = state.get("last_check")
+        from nebula.core.utils import relative_time
+
+        text = upd.message or "Not checked yet this session"
+        if checked and upd.status in ("idle", "up_to_date"):
+            text += f"  (last check: {relative_time(checked)})"
+        self.upd_status.setText(text)
+        self.upd_last.clear()
+        last = state.get("last_update") or {}
+        for _sha, msg in last.get("commits", []):
+            self.upd_last.addItem(f"\u2022 {msg}")
+        for f in last.get("files", [])[:30]:
+            self.upd_last.addItem(f"    {f}")
+        if not last:
+            self.upd_last.addItem("No updates installed yet.")
 
     # ------------------------------------------------------------ library
     def _library(self) -> QWidget:
@@ -417,7 +529,7 @@ class SettingsPage(Page):
         out = []
         if integ.id == "gog":
             if integ.connected():
-                out.append(("Sign out", lambda: self._gog_logout()))
+                out.append(("Sign out", self.ctl.gog_logout))
             else:
                 out.append(("Sign in", self.ctl.gog_login))
         elif integ.id == "steam":
@@ -430,12 +542,6 @@ class SettingsPage(Page):
         if integ.id != "local" and integ.connected():
             out.append(("Sync now", lambda i=integ.id: self.s.library.refresh([i])))
         return out
-
-    def _gog_logout(self) -> None:
-        if QMessageBox.question(self, "Sign out", "Sign out of GOG? Installed games stay installed.") \
-                == QMessageBox.StandardButton.Yes:
-            tasks.run_async(self.s.integrations["gog"].disconnect,
-                            on_done=lambda _r: (self.s.bus.integration_changed.emit("gog"), self._build_integrations()))
 
     def _enable(self, iid: str, on: bool) -> None:
         enabled = self.st.get("integrations.enabled") or {}

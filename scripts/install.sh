@@ -32,6 +32,22 @@ EXTRA=""
 echo "==> Installing Nebula and its dependencies (PySide6, requests)"
 "$VENV/bin/pip" install --quiet "$ROOT$EXTRA"
 
+# remember what was installed so the built-in updater only acts on real changes
+SHA=""
+git -C "$ROOT" rev-parse HEAD >/dev/null 2>&1 && SHA="$(git -C "$ROOT" rev-parse HEAD)"
+mkdir -p "$DATA/nebula"
+"$VENV/bin/python" - "$DATA/nebula/update-state.json" "$ROOT/pyproject.toml" "$SHA" <<'EOF'
+import hashlib, json, pathlib, sys
+state_path, pyproject, sha = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+state = json.loads(state_path.read_text()) if state_path.exists() else {}
+data = pyproject.read_bytes()
+state["dependency_blob"] = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+if sha:
+    state["installed_sha"] = sha
+state.pop("verified_sha", None)
+state_path.write_text(json.dumps(state, indent=2))
+EOF
+
 mkdir -p "$BIN" "$DATA/applications" "$DATA/icons/hicolor/scalable/apps"
 ln -sf "$VENV/bin/nebula" "$BIN/nebula"
 cp "$ROOT/data/$APP_ID.desktop" "$DATA/applications/"

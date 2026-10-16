@@ -39,9 +39,6 @@ class LibraryPage(Page):
         self.count_lbl = label("", "Subtle")
         head.addWidget(self.count_lbl, 0, Qt.AlignmentFlag.AlignBottom)
         head.addStretch(1)
-        self.sync_btn = icon_button("refresh", "Sync all platforms")
-        self.sync_btn.clicked.connect(lambda: self.s.library.refresh())
-        head.addWidget(self.sync_btn)
         lay.addLayout(head)
 
         bar = QHBoxLayout()
@@ -73,12 +70,6 @@ class LibraryPage(Page):
         self.desc_btn.toggled.connect(self._sort_changed)
         bar.addWidget(self.desc_btn)
         bar.addStretch(1)
-        self.save_view = button("Save view", "plus")
-        self.save_view.clicked.connect(self._save_view)
-        bar.addWidget(self.save_view)
-        self.delete_view = button("Delete view", "trash")
-        self.delete_view.clicked.connect(self._delete_view)
-        bar.addWidget(self.delete_view)
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(110, 260)
         self.size_slider.setValue(int(self.s.settings.get("library.cover_size") or 170))
@@ -129,7 +120,6 @@ class LibraryPage(Page):
         services.bus.job_progress.connect(lambda _j: self.grid.viewport().update() if self.isVisible() else None)
         services.bus.game_started.connect(lambda _u: self.grid.viewport().update())
         services.bus.game_stopped.connect(lambda *_: self._schedule())
-        services.bus.sync_state.connect(lambda *_: self.sync_btn.setEnabled(not self.s.library.syncing))
         self._apply_view_buttons()
 
     # -------------------------------------------------------- navigation
@@ -160,7 +150,6 @@ class LibraryPage(Page):
             self.search.setText(self.flt.text)
             self.search.blockSignals(False)
         self.title_lbl.setText(self.view_title)
-        self.delete_view.setVisible(self.view_index is not None)
         self.refresh()
 
     def _schedule(self) -> None:
@@ -294,7 +283,10 @@ class LibraryPage(Page):
             a.setChecked(getattr(f, attr))
             a.toggled.connect(lambda on, at=attr: (setattr(f, at, on), self.refresh()))
         m.addSeparator()
-        m.addAction("Clear all filters", self._clear)
+        m.addAction(icons.icon("plus"), "Save as view in the sidebar…", self._save_view)
+        if self.view_index is not None:
+            m.addAction(icons.icon("trash"), f"Delete view “{self.view_title}”", self._delete_view)
+        m.addAction(icons.icon("x"), "Clear all filters", self._clear)
 
     def _chips(self) -> None:
         clear_layout(self.chips)

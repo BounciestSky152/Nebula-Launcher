@@ -1,4 +1,4 @@
-"""Sidebar and top bar."""
+"""Sidebar and top bar (GOG-first layout, modelled on GOG Galaxy 2.0)."""
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QSize, QStringListModel, Qt, QTimer, Signal
@@ -78,34 +78,35 @@ class Sidebar(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
-        # profile
-        prof = QPushButton()
-        prof.setObjectName("SidebarButton")
-        prof.setCursor(Qt.CursorShape.PointingHandCursor)
-        prof.setMinimumHeight(64)
-        pl = QHBoxLayout(prof)
-        pl.setContentsMargins(14, 10, 10, 10)
-        self.avatar = Avatar(38)
-        pl.addWidget(self.avatar)
+        # brand header
+        brand = QPushButton()
+        brand.setObjectName("SidebarButton")
+        brand.setCursor(Qt.CursorShape.PointingHandCursor)
+        brand.setMinimumHeight(66)
+        brand.setToolTip("Home")
+        bl = QHBoxLayout(brand)
+        bl.setContentsMargins(16, 10, 10, 8)
+        bl.setSpacing(10)
+        logo = QLabel()
+        logo.setPixmap(icons.app_icon().pixmap(34, 34))
+        bl.addWidget(logo)
         col = QVBoxLayout()
         col.setSpacing(0)
-        self.name = label("Nebula", "ProfileName")
-        self.status = label("", "ProfileStatus")
-        col.addWidget(self.name)
-        col.addWidget(self.status)
-        pl.addLayout(col, 1)
-        for w in (self.avatar, self.name, self.status):
+        col.addWidget(label("NEBULA", "Brand"))
+        col.addWidget(label("FOR GOG", "BrandSub"))
+        bl.addLayout(col, 1)
+        for w in (logo,):
             w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        prof.clicked.connect(self._profile_menu)
-        self.profile_btn = prof
-        outer.addWidget(prof)
+        brand.clicked.connect(lambda: self.win.navigate("home"))
+        outer.addWidget(brand)
         area = QScrollArea()
         area.setWidgetResizable(True)
         area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        area.viewport().setAutoFillBackground(False)
         inner = QWidget()
-        inner.setObjectName("Sidebar")
+        inner.setStyleSheet("background: transparent;")
         self.lay = QVBoxLayout(inner)
-        self.lay.setContentsMargins(0, 4, 0, 10)
+        self.lay.setContentsMargins(0, 0, 0, 10)
         self.lay.setSpacing(2)
         area.setWidget(inner)
         outer.addWidget(area, 1)
@@ -113,34 +114,31 @@ class Sidebar(QWidget):
         self.group.setExclusive(True)
         self.buttons: dict[str, SidebarButton] = {}
         self._build()
-        # bottom actions
+        # Galaxy's "Add games & friends" button
         bottom = QHBoxLayout()
-        bottom.setContentsMargins(10, 8, 10, 12)
-        add = QPushButton(" Add games")
+        bottom.setContentsMargins(12, 8, 12, 14)
+        add = QPushButton("  Add games && friends")
         add.setIcon(icons.icon("plus", theme.TEXT))
         add.setCursor(Qt.CursorShape.PointingHandCursor)
         add.clicked.connect(self._add_menu)
         bottom.addWidget(add, 1)
-        gear = icon_button("settings", "Settings", size=20)
-        gear.clicked.connect(lambda: self.win.navigate("settings"))
-        bottom.addWidget(gear)
         outer.addLayout(bottom)
         bus = services.bus
         bus.library_changed.connect(self._schedule_counts)
         bus.game_changed.connect(lambda _k: self._schedule_counts())
         bus.jobs_changed.connect(self._update_downloads)
         bus.sync_state.connect(self._sync_state)
-        bus.integration_changed.connect(lambda _i: self.refresh_profile())
-        bus.friends_changed.connect(self._update_friends)
+        bus.integration_changed.connect(lambda _i: self.update_counts())
         self._count_timer = QTimer(self)
         self._count_timer.setSingleShot(True)
         self._count_timer.setInterval(300)
         self._count_timer.timeout.connect(self.update_counts)
-        self.refresh_profile()
         self.update_counts()
 
-    def _section(self, text: str) -> None:
-        self.lay.addWidget(label(text.upper(), "SidebarSection"))
+    def _section(self, text: str) -> QLabel:
+        lb = label(text.upper(), "SidebarSection")
+        self.lay.addWidget(lb)
+        return lb
 
     def _add(self, key: str, text: str, icon_name: str | None = None, pixmap=None) -> SidebarButton:
         b = SidebarButton(text, icon_name, pixmap)
@@ -151,30 +149,32 @@ class Sidebar(QWidget):
         return b
 
     def _build(self) -> None:
-        self._section("Games")
-        self._add("home", "Recent", "recent")
-        self._add("library:owned", "Owned games", "library")
+        gog = self.s.integrations.get("gog")
+        self._section("GOG.COM")
+        self._add("home", "Home", "home")
+        self._add("store", "Store", "store")
+        self._add("wishlist", "Wishlist", "star")
+        if gog:
+            self._add("library:source:gog", "My GOG games", pixmap=icons.badge(gog.letter, gog.color, 18))
+        self._section("Library")
+        self._add("library:owned", "All games", "library")
         self._add("library:installed", "Installed", "installed")
         self._add("library:favorites", "Favourites", "heart")
         self._add("library:updates", "Updates", "download")
-        self._section("Platforms")
+        self.platforms_header = self._section("Other platforms")
         for integ in self.s.integrations.values():
-            self._add(f"library:source:{integ.id}", integ.name, pixmap=icons.badge(integ.letter, integ.color, 18))
+            if integ.id != "gog":
+                self._add(f"library:source:{integ.id}", integ.name, pixmap=icons.badge(integ.letter, integ.color, 18))
         self.views_header = label("VIEWS", "SidebarSection")
         self.lay.addWidget(self.views_header)
         self.views_box = QVBoxLayout()
         self.views_box.setSpacing(2)
         self.lay.addLayout(self.views_box)
         self._add("library:hidden", "Hidden games", "eye-off")
-        self._section("GOG.COM")
-        self._add("store", "Store", "store")
-        self._add("wishlist", "Wishlist", "star")
         self._section("Activity")
-        self._add("friends", "Friends", "users")
         self._add("downloads", "Downloads", "download")
         self._add("stats", "Statistics", "chart")
         self.lay.addStretch(1)
-        self.buttons["friends"].setCheckable(False)
         self.rebuild_views()
 
     def rebuild_views(self) -> None:
@@ -198,9 +198,6 @@ class Sidebar(QWidget):
         self.update_counts()
 
     def _clicked(self, key: str) -> None:
-        if key == "friends":
-            self.win.toggle_friends()
-            return
         if key.startswith("library:"):
             self.win.navigate("library", key.split(":", 1)[1])
         else:
@@ -233,12 +230,16 @@ class Sidebar(QWidget):
         self.buttons["library:hidden"].set_count(c.get("hidden", 0))
         self.buttons["library:hidden"].setVisible(bool(c.get("hidden")))
         enabled = self.s.settings.get("integrations.enabled") or {}
+        any_platform = False
         for integ in self.s.integrations.values():
             b = self.buttons.get(f"library:source:{integ.id}")
-            if b:
-                b.set_count(c.get(integ.id, 0))
-                b.setVisible(enabled.get(integ.id, True) and (integ.connected() or c.get(integ.id, 0) > 0
-                                                             or integ.id in ("gog", "local")))
+            if not b:
+                continue
+            b.set_count(c.get(integ.id, 0))
+            visible = enabled.get(integ.id, True) and (integ.id == "gog" or integ.connected() or c.get(integ.id, 0) > 0)
+            b.setVisible(visible)
+            any_platform |= visible and integ.id != "gog"
+        self.platforms_header.setVisible(any_platform)
         self.views_header.setVisible(bool(self.s.settings.get("library.custom_views")) or bool(c.get("hidden")))
         from nebula.core.library import LibraryFilter
 
@@ -247,57 +248,28 @@ class Sidebar(QWidget):
             if b:
                 b.set_count(len(self.s.library.query(LibraryFilter.from_dict(v.get("filter", {})))))
         self._update_downloads()
-        self._update_friends()
 
     def _update_downloads(self) -> None:
         self.buttons["downloads"].set_badge(len(self.s.jobs.active_jobs()))
-
-    def _update_friends(self) -> None:
-        self.buttons["friends"].set_count(self.s.friends.online_count() or "")
 
     def _sync_state(self, iid: str, on: bool) -> None:
         b = self.buttons.get(f"library:source:{iid}")
         if b:
             b.set_syncing(on)
 
-    def refresh_profile(self) -> None:
-        gog = self.s.integrations.get("gog")
-        if gog and gog.connected():
-            name = gog.account_name() or "GOG user"
-            self.name.setText(name)
-            self.status.setText("Online • GOG")
-            self.avatar.set_avatar(gog.avatar_url(), name, theme.SUCCESS)
-        else:
-            steam = self.s.integrations.get("steam")
-            name = (steam.account_name() if steam and steam.available() else "") or "Nebula"
-            self.name.setText(name)
-            self.status.setText("Click to sign in to GOG")
-            self.avatar.set_avatar("", name)
-        self.update_counts()
-
-    def _profile_menu(self) -> None:
-        m = QMenu(self)
-        m.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        gog = self.s.integrations.get("gog")
-        if gog and gog.connected():
-            m.addAction(icons.icon("external"), "View GOG profile",
-                        lambda: xdg_open(f"https://www.gog.com/u/{gog.account_name()}"))
-            m.addAction(icons.icon("logout"), "Sign out of GOG", lambda: self.win.navigate("settings", "Integrations"))
-        else:
-            m.addAction(icons.icon("user"), "Sign in to GOG", self.ctl.gog_login)
-        m.addAction(icons.icon("link"), "Connect platforms…", lambda: self.win.navigate("settings", "Integrations"))
-        m.addSeparator()
-        m.addAction(icons.icon("settings"), "Settings", lambda: self.win.navigate("settings"))
-        m.addAction(icons.icon("power"), "Quit Nebula", self.win.quit_app)
-        m.exec(self.profile_btn.mapToGlobal(self.profile_btn.rect().bottomLeft()))
-
     def _add_menu(self) -> None:
         m = QMenu(self)
         m.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        gog = self.s.integrations.get("gog")
+        if gog and not gog.connected():
+            m.addAction(icons.icon("user"), "Sign in with GOG…", self.ctl.gog_login)
         m.addAction(icons.icon("plus"), "Add game manually…", self.ctl.add_game)
         m.addAction(icons.icon("folder"), "Scan folder for installed games…", self.ctl.scan_folder)
-        m.addAction(icons.icon("link"), "Connect gaming platforms…",
+        m.addAction(icons.icon("link"), "Connect other platforms…",
                     lambda: self.win.navigate("settings", "Integrations"))
+        m.addAction(icons.icon("users"), "Add friends on GOG.COM",
+                    lambda: xdg_open("https://www.gog.com/en/account/friends"))
+        m.addSeparator()
         m.addAction(icons.icon("proton"), "Download GE-Proton…", self.ctl.proton_download)
         btn = self.sender()
         m.exec(btn.mapToGlobal(btn.rect().topLeft()) - QPoint(0, m.sizeHint().height()))
@@ -306,13 +278,14 @@ class Sidebar(QWidget):
 class TopBar(QWidget):
     search_submitted = Signal(str)
 
-    def __init__(self, services, window):
+    def __init__(self, services, ctl, window):
         super().__init__()
         self.s = services
+        self.ctl = ctl
         self.win = window
         self.setObjectName("TopBar")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setFixedHeight(56)
+        self.setFixedHeight(58)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(16, 8, 16, 8)
         lay.setSpacing(6)
@@ -325,8 +298,10 @@ class TopBar(QWidget):
         lay.addSpacing(8)
         self.search = QLineEdit()
         self.search.setObjectName("SearchBox")
-        self.search.setPlaceholderText("Search your games and the store  (Ctrl+F)")
+        self.search.setPlaceholderText("Search your games and GOG.COM")
+        self.search.setToolTip("Search your library and the GOG store (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
+        self.search.setMinimumWidth(380)
         self.search.addAction(icons.icon("search"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.returnPressed.connect(lambda: self.search_submitted.emit(self.search.text().strip()))
         self._titles = QStringListModel()
@@ -337,12 +312,13 @@ class TopBar(QWidget):
         comp.activated.connect(self._completed)
         self.search.setCompleter(comp)
         lay.addWidget(self.search)
-        lay.addStretch(1)
         self.sync_spinner = Spinner(16)
         self.sync_spinner.hide()
         self.sync_lbl = label("", "Faint")
+        lay.addSpacing(6)
         lay.addWidget(self.sync_spinner)
         lay.addWidget(self.sync_lbl)
+        lay.addStretch(1)
         self.sync = icon_button("refresh", "Sync all platforms (F5)")
         self.sync.clicked.connect(lambda: self.s.library.refresh())
         lay.addWidget(self.sync)
@@ -351,6 +327,7 @@ class TopBar(QWidget):
         self.dl.setIcon(icons.icon("download"))
         self.dl.setIconSize(QSize(18, 18))
         self.dl.setToolTip("Downloads")
+        self.dl.setCursor(Qt.CursorShape.PointingHandCursor)
         self.dl.clicked.connect(lambda: self.win.navigate("downloads"))
         lay.addWidget(self.dl)
         self.friends = QPushButton()
@@ -359,14 +336,77 @@ class TopBar(QWidget):
         self.friends.setIconSize(QSize(18, 18))
         self.friends.setCheckable(True)
         self.friends.setToolTip("Friends")
+        self.friends.setCursor(Qt.CursorShape.PointingHandCursor)
         self.friends.clicked.connect(window.toggle_friends)
         lay.addWidget(self.friends)
+        lay.addSpacing(6)
+        # GOG identity: avatar menu when signed in, otherwise a sign-in button
+        self.sign_in = QPushButton("Sign in with GOG")
+        self.sign_in.setObjectName("GogSignIn")
+        self.sign_in.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sign_in.clicked.connect(ctl.gog_login)
+        lay.addWidget(self.sign_in)
+        self.avatar_btn = QPushButton()
+        self.avatar_btn.setObjectName("AvatarButton")
+        self.avatar_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.avatar_btn.setMinimumHeight(36)
+        al = self._avatar_lay = QHBoxLayout(self.avatar_btn)
+        al.setContentsMargins(3, 2, 10, 2)
+        al.setSpacing(8)
+        self.avatar = Avatar(30)
+        self.avatar_name = label("", None)
+        self.avatar_name.setStyleSheet("background: transparent; font-weight: 600;")
+        for w in (self.avatar, self.avatar_name):
+            w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        al.addWidget(self.avatar)
+        al.addWidget(self.avatar_name)
+        self.avatar_btn.clicked.connect(self._profile_menu)
+        lay.addWidget(self.avatar_btn)
+        self.settings_btn = icon_button("settings", "Settings (Ctrl+,)", size=19)
+        self.settings_btn.clicked.connect(lambda: self.win.navigate("settings"))
+        lay.addWidget(self.settings_btn)
         services.bus.sync_state.connect(self._sync)
         services.bus.library_changed.connect(self._update_titles)
         services.bus.jobs_changed.connect(self._downloads)
         services.bus.job_progress.connect(lambda _j: self._downloads())
         services.bus.friends_changed.connect(self._friends)
+        services.bus.integration_changed.connect(lambda _i: self.refresh_profile())
         self._update_titles()
+        self.refresh_profile()
+
+    def refresh_profile(self) -> None:
+        gog = self.s.integrations.get("gog")
+        signed_in = bool(gog and gog.connected())
+        self.sign_in.setVisible(not signed_in)
+        self.avatar_btn.setVisible(signed_in)
+        if signed_in:
+            name = gog.account_name() or "GOG user"
+            self.avatar_name.setText(name if len(name) <= 20 else name[:19] + "…")
+            # a push button does not size itself to a child layout
+            self.avatar_btn.setFixedWidth(self._avatar_lay.sizeHint().width())
+            self.avatar.set_avatar(gog.avatar_url(), name, theme.SUCCESS)
+            self.avatar_btn.setToolTip(f"Signed in to GOG as {name}")
+
+    def _profile_menu(self) -> None:
+        gog = self.s.integrations.get("gog")
+        m = QMenu(self)
+        m.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        if gog and gog.connected():
+            name = gog.account_name()
+            head = m.addAction(f"Signed in as {name}")
+            head.setEnabled(False)
+            m.addSeparator()
+            m.addAction(icons.icon("user"), "My GOG profile", lambda: xdg_open(f"https://www.gog.com/u/{name}"))
+            m.addAction(icons.icon("star"), "Wishlist", lambda: self.win.navigate("wishlist"))
+            m.addAction(icons.icon("external"), "GOG account settings",
+                        lambda: xdg_open("https://www.gog.com/en/account/settings"))
+            m.addSeparator()
+            m.addAction(icons.icon("logout"), "Sign out of GOG…", self.ctl.gog_logout)
+        else:
+            m.addAction(icons.icon("user"), "Sign in with GOG…", self.ctl.gog_login)
+        m.addSeparator()
+        m.addAction(icons.icon("power"), "Quit Nebula", self.win.quit_app)
+        m.exec(self.avatar_btn.mapToGlobal(self.avatar_btn.rect().bottomLeft()))
 
     def _sync(self, *_a) -> None:
         syncing = self.s.library.syncing
@@ -389,7 +429,7 @@ class TopBar(QWidget):
             QTimer.singleShot(0, self.search.clear)
 
     def _downloads(self) -> None:
-        jobs = [j for j in self.s.jobs.active_jobs()]
+        jobs = self.s.jobs.active_jobs()
         if jobs:
             running = [j for j in jobs if j.state == "running"]
             pct = int(sum(j.progress for j in jobs) * 100 / len(jobs))

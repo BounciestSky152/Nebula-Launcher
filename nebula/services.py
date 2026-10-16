@@ -12,6 +12,7 @@ from nebula.core.events import get_bus
 from nebula.core.jobs import JobManager
 from nebula.core.launcher import GameLauncher
 from nebula.core.library import LibraryManager
+from nebula.core.self_update import SelfUpdateService
 from nebula.core.settings import Settings
 from nebula.core.social import AchievementService, FriendsService
 from nebula.integrations import create_all
@@ -37,6 +38,7 @@ class Services:
         self.launcher = GameLauncher(self)
         self.friends = FriendsService(self)
         self.actions = Actions(self)
+        self.self_update = SelfUpdateService(self)
         self._timers: list[QTimer] = []
 
     def integration(self, source: str) -> Integration:
@@ -73,6 +75,8 @@ class Services:
             t.stop()
         self.launcher.timer.stop()
         self.friends.timer.stop()
+        for t in (self.self_update.timer, self.self_update.wait_timer, self.self_update.restart_timer):
+            t.stop()
         self.jobs.shutdown()
         gog = self.gog()
         if gog:
