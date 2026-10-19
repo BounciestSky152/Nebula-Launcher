@@ -12,7 +12,12 @@ from nebula.ui.pages.base import Page
 from nebula.ui.widgets.common import label
 from nebula.ui.widgets.gamegrid import ENTRY_ROLE, CoverRow
 
-PROMPTS = (("A", "#5fb85f", "Play"), ("Y", "#e0b400", "Details"), ("B", "#d9534f", "Back"), ("☰", "#8c84b8", "Settings"))
+PROMPTS = {  # button glyphs as printed on each controller
+    "xbox": (("A", "#5fb85f", "Play"), ("Y", "#e0b400", "Details"), ("B", "#d9534f", "Back"),
+             ("☰", "#8c84b8", "Settings")),
+    "playstation": (("✕", "#7fa7e0", "Play"), ("△", "#4fc2a8", "Details"), ("○", "#e0707a", "Back"),
+                    ("≡", "#8c84b8", "Settings")),
+}
 
 
 def _glyph(letter: str, color: str, size: int = 26) -> QPixmap:
@@ -81,18 +86,27 @@ class HandheldPage(Page):
             self.rows.append((head_lbl, row))
         rows_lay.addStretch(1)
         foot = QHBoxLayout()
+        foot.addWidget(label("F11  Exit handheld mode", "Faint"))
         foot.addStretch(1)
-        for letter, color, text in PROMPTS:
-            g = QLabel()
-            g.setPixmap(_glyph(letter, color))
+        self.prompts: list[tuple[QLabel, QLabel]] = []
+        for _i in range(4):
+            g, t = QLabel(), label("", "Subtle")
             foot.addWidget(g)
-            foot.addWidget(label(text, "Subtle"))
+            foot.addWidget(t)
             foot.addSpacing(18)
+            self.prompts.append((g, t))
         lay.addLayout(foot)
+        self.set_controller("xbox")
         timer = QTimer(self)
         timer.timeout.connect(self._tick)
         timer.start(20_000)
         self._tick()
+
+    def set_controller(self, kind: str) -> None:
+        """Show the prompts of the controller in use (Xbox or PlayStation layout)."""
+        for (g, t), (letter, color, text) in zip(self.prompts, PROMPTS.get(kind, PROMPTS["xbox"])):
+            g.setPixmap(_glyph(letter, color))
+            t.setText(text)
 
     def _tick(self) -> None:
         self.clock.setText(time.strftime("%H:%M"))

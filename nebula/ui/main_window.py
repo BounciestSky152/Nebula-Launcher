@@ -164,7 +164,7 @@ class MainWindow(QMainWindow):
 
     def _set_handheld(self, on: bool) -> None:
         if not hasattr(self, "_gamepad"):
-            self._gamepad = handheld_mod.Gamepad()
+            self._gamepad = handheld_mod.Gamepad(on_kind=self.pages["handheld"].set_controller)
             self._nav = handheld_mod.Navigation(self)
         app = QApplication.instance()
         if on:
@@ -223,6 +223,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+4"), self, activated=lambda: self.navigate("store"))
         QShortcut(QKeySequence("Ctrl+5"), self, activated=lambda: self.navigate("downloads"))
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.quit_app)
+        QShortcut(QKeySequence("F11"), self, activated=lambda: self.s.settings.set(
+            "handheld.mode", "off" if theme.HANDHELD else "on"))  # leave (or enter) handheld mode
 
     # ------------------------------------------------------ notifications
     def toast(self, title: str, body: str = "", kind: str = "info") -> None:
