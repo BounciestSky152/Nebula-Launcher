@@ -32,7 +32,7 @@ nebula = "nebula.main:main"
 include = ["nebula*"]
 
 [tool.setuptools.package-data]
-nebula = ["assets/fonts/*"]
+nebula = ["assets/fonts/*", "assets/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

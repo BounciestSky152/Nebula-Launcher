@@ -89,6 +89,7 @@ def main(argv=None) -> int:
     preload_modules()
     theme.apply(app)
     app.setWindowIcon(icons.app_icon())
+    _install_icon()
     if args.no_update:
         os.environ["NEBULA_NO_UPDATE"] = "1"
     services = Services()
@@ -166,3 +167,18 @@ def paths_root():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _install_icon() -> None:
+    """Keep the desktop/taskbar icon in step with the app (self-updates don't run the installer)."""
+    import os
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parent / "assets" / "nebula.svg"
+    data = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    dst = data / "icons" / "hicolor" / "scalable" / "apps" / f"{APP_ID}.svg"
+    try:
+        if dst.parent.is_dir() and (not dst.exists() or dst.read_bytes() != src.read_bytes()):
+            dst.write_bytes(src.read_bytes())
+    except OSError:
+        pass

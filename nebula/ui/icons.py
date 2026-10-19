@@ -150,18 +150,18 @@ def badge(letter: str, color: str, size: int = 16, ratio: float = 2.0) -> QPixma
 
 
 def app_icon() -> QIcon:
+    """The ringed-planet logo; the same SVG is installed as the desktop/taskbar icon."""
+    from pathlib import Path
+
+    svg = Path(__file__).resolve().parent.parent / "assets" / "nebula.svg"
+    renderer = QSvgRenderer(str(svg))
     ic = QIcon()
-    for size in (16, 24, 32, 48, 64, 128, 256):
+    for size in (16, 22, 24, 32, 48, 64, 128, 256):
         pm = QPixmap(size, size)
         pm.fill(Qt.GlobalColor.transparent)
         p = QPainter(pm)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(0, 0, size, size), size * 0.22, size * 0.22)
-        p.fillPath(path, QColor(theme.ACCENT))
-        renderer = QSvgRenderer(QByteArray(_svg("nebula", "#ffffff", 1.6)))
-        m = size * 0.16
-        renderer.render(p, QRectF(m, m, size - 2 * m, size - 2 * m))
+        renderer.render(p, QRectF(0, 0, size, size))
         p.end()
         ic.addPixmap(pm)
     return ic
