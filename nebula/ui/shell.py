@@ -60,8 +60,9 @@ class SectionHeader(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         y = self.height() - 9
-        x0 = NODE_X + self.indent
-        _sparkle(p, QPointF(x0, y - 3.5), 4.2, LAVENDER)
+        x0 = 8 if theme.classic() else NODE_X + self.indent
+        if not theme.classic():
+            _sparkle(p, QPointF(x0, y - 3.5), 4.2, LAVENDER)
         f = theme.font("display", 7.6)
         f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2.4)
         p.setFont(f)
@@ -71,7 +72,8 @@ class SectionHeader(QWidget):
         line = QLinearGradient(x, 0, self.width() - 14, 0)
         line.setColorAt(0, QColor(183, 156, 255, 90))
         line.setColorAt(1, QColor(183, 156, 255, 0))
-        p.fillRect(QRectF(x, y - 3.5, max(0, self.width() - 34 - x), 1), line)
+        if not theme.classic():
+            p.fillRect(QRectF(x, y - 3.5, max(0, self.width() - 34 - x), 1), line)
         # fold arrow at the right
         ax, ay = self.width() - 22, y - 3.5
         arrow = QPainterPath()
@@ -155,6 +157,8 @@ class OrbitPanel(QWidget):
     WOBBLE = 7  # how far single items drift off it, so the column never lines up
 
     def _offset(self, y: float) -> float:
+        if theme.classic():
+            return 0.0
         t = min(1.0, max(0.0, y / max(1, self.height())))
         return self.BULGE * math.sin(math.pi * t) + self.WOBBLE * math.sin(y / 23.0) * math.sin(y / 61.0 + 1.3)
 
@@ -177,6 +181,8 @@ class OrbitPanel(QWidget):
         self.update()
 
     def paintEvent(self, _e):  # noqa: N802
+        if theme.classic():
+            return
         nodes = sorted((self._cy(w) - (3.5 if isinstance(w, SectionHeader) else 0), w)
                        for w in self.findChildren(QWidget)
                        if isinstance(w, (SidebarButton, SectionHeader)) and w.isVisible())
@@ -254,7 +260,9 @@ class SidebarButton(QPushButton):
         super().leaveEvent(e)
         self.update()
 
-    def paintEvent(self, _e):  # noqa: N802
+    def paintEvent(self, e):  # noqa: N802
+        if theme.classic():
+            return super().paintEvent(e)
         on, hover = self.isChecked(), self.underMouse()
         if not (on or hover):
             return
@@ -385,6 +393,13 @@ class Sidebar(QWidget):
         self._bg = None
 
     def paintEvent(self, _e):  # noqa: N802
+        if theme.classic():
+            from PySide6.QtWidgets import QStyle, QStyleOption
+
+            opt = QStyleOption()
+            opt.initFrom(self)
+            self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, opt, QPainter(self), self)
+            return
         if self._bg is None:
             self._bg = self._render_bg()
         QPainter(self).drawPixmap(0, 0, self._bg)

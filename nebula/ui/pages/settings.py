@@ -142,9 +142,29 @@ class SettingsPage(Page):
         fa.addRow(self.check("appearance.starfield", "Starry sky background"))
         fa.addRow(self.check("appearance.animate_stars", "Animate the stars (twinkling and shooting stars)"))
         fa.addRow(label("The animation pauses automatically while a game is running.", "Faint"))
-        fa.addRow("Interface font", self.font_combo("appearance.font_ui"))
-        fa.addRow("Titles && logo font", self.font_combo("appearance.font_display"))
-        fa.addRow("Sidebar font", self.font_combo("appearance.font_sidebar"))
+        th = QComboBox()
+        th.setMaximumWidth(260)
+        th.addItem("Nebula", "nebula")
+        th.addItem("Classic (the original look)", "classic")
+        th.setCurrentIndex(max(0, th.findData(self.st.get("appearance.theme") or "nebula")))
+        th.currentIndexChanged.connect(lambda _i: self.st.set("appearance.theme", th.currentData()))
+        fa.addRow("Theme", th)
+        combos = {k: self.font_combo(k) for k in ("appearance.font_ui", "appearance.font_display",
+                                                   "appearance.font_sidebar")}
+        fa.addRow("Interface font", combos["appearance.font_ui"])
+        fa.addRow("Titles && logo font", combos["appearance.font_display"])
+        fa.addRow("Sidebar font", combos["appearance.font_sidebar"])
+        reset = button("Reset fonts to default", "refresh")
+        reset.setMaximumWidth(260)
+
+        def reset_fonts() -> None:
+            from nebula.core.settings import DEFAULTS
+
+            for k, c in combos.items():
+                c.setCurrentIndex(max(0, c.findData(DEFAULTS.get(k) or "")))  # also saves the setting
+
+        reset.clicked.connect(reset_fonts)
+        fa.addRow("", reset)
         lay.addWidget(ga)
         g, f = self.group("Application")
         f.addRow(self.check("general.show_tray", "Show icon in the system tray"))

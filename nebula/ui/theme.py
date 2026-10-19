@@ -513,23 +513,39 @@ def load_fonts() -> None:
         QFontDatabase.addApplicationFont(str(f))
 
 
+MODE = "nebula"  # "nebula" (space-styled sidebar, bundled fonts) | "classic" (the original look)
+CLASSIC_QSS = """
+#Sidebar { background: rgba(8, 7, 18, 0.72); border-right: 1px solid rgba(160, 140, 255, 0.14); }
+QPushButton#SidebarButton:hover { background: #1e1e25; }
+QPushButton#SidebarButton:checked { background: #2c2142; }
+#TopBar { background: rgba(12, 10, 24, 0.55); }
+#Card { background: rgba(28, 26, 44, 0.72); border: 1px solid rgba(160, 140, 255, 0.14); }
+"""
+
+
+def classic() -> bool:
+    return MODE == "classic"
+
+
 def font(role: str, point_size: float = 10) -> QFont:
-    """The configured font for ``role`` (ui | display | sidebar)."""
+    """The configured font for ``role`` (ui | display | sidebar); the classic theme uses the system font."""
     f = QFont(_base_font) if _base_font is not None else QFont()
-    if FONTS.get(role):
+    if FONTS.get(role) and (role == "ui" or not classic()):
         f.setFamily(FONTS[role])
     f.setPointSizeF(point_size)
     return f
 
 
-def set_fonts(app: QApplication, ui: str = "", display: str = "", sidebar: str = "") -> None:
+def set_fonts(app: QApplication, ui: str = "", display: str = "", sidebar: str = "", mode: str | None = None) -> None:
+    global MODE
+    MODE = mode or MODE
     FONTS.update(ui=ui or "", display=display or "", sidebar=sidebar or "")
     load_fonts()
     app.setFont(font("ui", _base_font.pointSizeF() if _base_font is not None else 10))
-    rules = []
-    if FONTS["display"]:
+    rules = [CLASSIC_QSS] if classic() else []
+    if FONTS["display"] and not classic():
         rules.append(f'#PageTitle {{ font-family: "{FONTS["display"]}"; font-weight: 400; }}')
-    if FONTS["sidebar"]:
+    if FONTS["sidebar"] and not classic():
         rules.append(f'QPushButton#SidebarButton QLabel {{ font-family: "{FONTS["sidebar"]}"; font-size: 9pt; }}')
     app.setStyleSheet(QSS + "\n".join(rules))
 

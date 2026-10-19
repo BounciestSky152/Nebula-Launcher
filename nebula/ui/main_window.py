@@ -134,8 +134,11 @@ class MainWindow(QMainWindow):
         st = self.s.settings
         fonts = (st.get("appearance.font_ui") or "", st.get("appearance.font_display") or "",
                  st.get("appearance.font_sidebar") or "")
-        if fonts != (theme.FONTS["ui"], theme.FONTS["display"], theme.FONTS["sidebar"]):
-            theme.set_fonts(QApplication.instance(), *fonts)
+        mode = "classic" if st.get("appearance.theme") == "classic" else "nebula"
+        self.starfield.set_classic(mode == "classic")
+        if fonts != (theme.FONTS["ui"], theme.FONTS["display"], theme.FONTS["sidebar"]) or mode != theme.MODE:
+            theme.set_fonts(QApplication.instance(), *fonts, mode=mode)
+            self.sidebar.orbit.arrange()
             for w in self.sidebar.findChildren(QWidget) + [self.sidebar]:
                 w.update()
         self.starfield.set_stars(bool(st.get("appearance.starfield")))

@@ -34,6 +34,7 @@ class Starfield(QWidget):
         self._next_shot = 40
         self.animate = True
         self.show_stars = True
+        self.classic = False  # the original, brighter sky with flared stars
         self.timer = QTimer(self)
         self.timer.setInterval(1000 // FPS)
         self.timer.timeout.connect(self._tick)
@@ -53,6 +54,12 @@ class Starfield(QWidget):
         self.show_stars = on
         self._sky = None
         self.update()
+
+    def set_classic(self, on: bool) -> None:
+        if on != self.classic:
+            self.classic = on
+            self._sky = None
+            self.update()
 
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)
@@ -81,7 +88,8 @@ class Starfield(QWidget):
             r = rnd.uniform(0.25, 0.6) * max(w, h)
             hue = rnd.choice([268, 275, 285, 230, 300, 210])
             g = QRadialGradient(QPointF(cx, cy), r)
-            c = QColor.fromHsl(hue, 90, 70, rnd.randint(6, 14))
+            c = (QColor.fromHsl(hue, 180, 90, rnd.randint(18, 38)) if self.classic
+                 else QColor.fromHsl(hue, 90, 70, rnd.randint(6, 14)))
             g.setColorAt(0, c)
             g.setColorAt(1, QColor(c.red(), c.green(), c.blue(), 0))
             p.setPen(Qt.PenStyle.NoPen)
@@ -90,7 +98,7 @@ class Starfield(QWidget):
         # a faint milky band
         band = QLinearGradient(0, h * 0.15, w, h * 0.85)
         band.setColorAt(0.0, QColor(150, 140, 255, 0))
-        band.setColorAt(0.5, QColor(200, 200, 230, 6))
+        band.setColorAt(0.5, QColor(170, 150, 255, 14) if self.classic else QColor(200, 200, 230, 6))
         band.setColorAt(1.0, QColor(150, 140, 255, 0))
         p.fillRect(QRectF(0, 0, w, h), band)
         # stars
@@ -113,6 +121,11 @@ class Starfield(QWidget):
                 glow.setColorAt(1, gc)
                 p.setBrush(glow)
                 p.drawEllipse(QPointF(x, y), radius * 4, radius * 4)
+                if self.classic:  # the original cross flares
+                    p.setPen(QPen(QColor(255, 255, 255, 70), 0.6))
+                    p.drawLine(QPointF(x - radius * 5, y), QPointF(x + radius * 5, y))
+                    p.drawLine(QPointF(x, y - radius * 5), QPointF(x, y + radius * 5))
+                    p.setPen(Qt.PenStyle.NoPen)
             if len(self._twinkle) < TWINKLERS and 0.25 < mag < 0.8 and i % 3 == 0:
                 self._twinkle.append((x, y, radius + 0.4, rnd.uniform(0, math.tau), QColor(rnd.choice(STAR_COLORS))))
         p.end()

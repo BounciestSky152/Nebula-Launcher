@@ -80,6 +80,7 @@ DEFAULTS: dict[str, Any] = {
     "updates.repo": "BounciestSky152/Nebula-Launcher",
     "updates.branch": "main",
     "updates.github_token": "",
+    "appearance.theme": "nebula",  # nebula | classic
     "appearance.font_ui": "",  # "" = the system font
     "appearance.font_display": "Audiowide",  # logo, section headers, page titles
     "appearance.font_sidebar": "Orbitron",  # only needed for a private repository
