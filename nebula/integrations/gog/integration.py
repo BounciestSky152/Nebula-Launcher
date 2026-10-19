@@ -95,6 +95,7 @@ class GogIntegration(Integration):
         self.cloud = CloudSaves(self.api, services.compat, services.db)
         self._owned: set[str] | None = None
         self._wishlist: set[str] | None = None
+        self.wishlist_ok: bool | None = None  # False: GOG won't give us the wishlist, so the app hides it
         self._presence_game: str | None = None
         # build / installer lists: key -> (monotonic time, wall time, items)
         self._vcache: dict[tuple, tuple[float, float, list]] = {}
@@ -154,6 +155,7 @@ class GogIntegration(Integration):
         self.db.kv_set("gog.user", {})
         self._owned = None
         self._wishlist = None
+        self.wishlist_ok = None
         self.invalidate_versions()
 
     # ------------------------------------------------------- install book
@@ -1293,9 +1295,41 @@ class GogIntegration(Integration):
         if self._wishlist is None or refresh:
             try:
                 self._wishlist = self.api.wishlist()
-            except Exception:  # noqa: BLE001
+                self.wishlist_ok = True
+            except Exception as exc:  # noqa: BLE001
+                log.info("GOG wishlist unavailable: %s", exc)
                 self._wishlist = set()
+                self.wishlist_ok = False
         return self._wishlist
+
+    def wishlist_available(self) -> bool:
+        """False when GOG doesn't share the wishlist (not public, or the request fails); the app hides it then."""
+        return self.connected() and self.wishlist_ok is not False
+
+    def wishlist_products(self, ids) -> list[dict]:
+        """Store items for exactly these product ids. The catalog is asked first (it has prices); anything it
+        doesn't return comes from the products API, and anything else the catalog sends back is dropped."""
+        ids = sorted({str(i) for i in ids})
+        found: dict[str, dict] = {}
+        for i in range(0, len(ids), 48):  # the catalog serves at most 48 products per request
+            try:
+                data = self.catalog(product_ids=ids[i:i + 48], limit=48, product_types="in:game,pack,dlc,extras")
+            except Exception as exc:  # noqa: BLE001
+                log.debug("wishlist catalog lookup failed: %s", exc)
+                continue
+            for p in data.get("products", []) or []:
+                if str(p.get("id")) in ids:
+                    found[str(p["id"])] = p
+        missing = [i for i in ids if i not in found]
+        if missing:
+            for p in self.api.products(missing):
+                images = p.get("images") or {}
+                cover = images.get("background") or images.get("logo2x") or images.get("logo") or ""
+                found[str(p.get("id"))] = {
+                    "id": str(p.get("id")), "title": p.get("title", ""), "slug": p.get("slug", ""),
+                    "coverHorizontal": https(cover) if cover else "", "developers": [], "price": {},
+                    "operatingSystems": [k for k, v in (p.get("content_system_compatibility") or {}).items() if v]}
+        return [found[i] for i in ids if i in found]
 
     def set_wishlisted(self, product_id: str, wished: bool) -> None:
         if wished:

@@ -226,3 +226,24 @@ def test_custom_game_and_plugin_loader(services, tmp_path):
     src = os.path.join(os.path.dirname(__file__), "..", "docs", "examples", "example_plugin.py")
     (paths.plugins_dir() / "roms.py").write_text(open(src).read())
     assert [c.id for c in plugin_classes()] == ["roms"]
+
+
+def test_gog_wishlist_exact_items_and_privacy(services, monkeypatch):
+    gog = services.integrations["gog"]
+    monkeypatch.setattr(gog, "connected", lambda: True)
+    monkeypatch.setattr(gog.api, "wishlist", lambda: {"1", "2"})
+    # the catalog ignores the id filter and sends trending games: only wishlisted ones survive
+    monkeypatch.setattr(gog, "catalog", lambda **kw: {"products": [{"id": "1", "title": "Wished"},
+                                                                   {"id": "9", "title": "Trending"}]})
+    monkeypatch.setattr(gog.api, "products", lambda ids, expand=(): [
+        {"id": 2, "title": "Delisted", "images": {"logo2x": "//img/2.png"},
+         "content_system_compatibility": {"windows": True, "linux": False}}])
+    items = gog.wishlist_products(gog.wishlist(refresh=True))
+    assert [i["title"] for i in items] == ["Wished", "Delisted"]
+    assert items[1]["coverHorizontal"].startswith("https:") and items[1]["operatingSystems"] == ["windows"]
+    assert gog.wishlist_available()
+
+    def private():
+        raise RuntimeError("HTTP 403")
+    monkeypatch.setattr(gog.api, "wishlist", private)
+    assert gog.wishlist(refresh=True) == set() and not gog.wishlist_available()

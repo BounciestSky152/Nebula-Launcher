@@ -336,6 +336,8 @@ class Sidebar(QWidget):
         bus.jobs_changed.connect(self._update_downloads)
         bus.sync_state.connect(self._sync_state)
         bus.integration_changed.connect(lambda _i: self.update_counts())
+        bus.integration_changed.connect(lambda i: self.check_wishlist() if i == "gog" else None)
+        QTimer.singleShot(1500, self.check_wishlist)
         self._count_timer = QTimer(self)
         self._count_timer.setSingleShot(True)
         self._count_timer.setInterval(300)
@@ -469,6 +471,26 @@ class Sidebar(QWidget):
 
     def _schedule_counts(self) -> None:
         self._count_timer.start()
+
+    def check_wishlist(self) -> None:
+        """Hide the Wishlist entry when GOG doesn't share the wishlist (or nobody is signed in)."""
+        gog = self.s.integrations.get("gog")
+        btn = self.buttons.get("wishlist")
+        if gog is None or btn is None:
+            return
+        if not gog.connected():
+            btn.setVisible(False)
+            return
+
+        def done(_w):
+            try:
+                btn.setVisible(gog.wishlist_available())
+            except RuntimeError:  # the sidebar was rebuilt meanwhile
+                pass
+
+        from nebula.core import tasks
+
+        tasks.run_async(gog.wishlist, True, on_done=done, on_error=lambda _e: btn.setVisible(False))
 
     def update_counts(self) -> None:
         c = self.s.library.counts()
@@ -648,7 +670,8 @@ class TopBar(QWidget):
             head.setEnabled(False)
             m.addSeparator()
             m.addAction(icons.icon("user"), "My GOG profile", lambda: xdg_open(f"https://www.gog.com/u/{name}"))
-            m.addAction(icons.icon("star"), "Wishlist", lambda: self.win.navigate("wishlist"))
+            if gog.wishlist_available():
+                m.addAction(icons.icon("star"), "Wishlist", lambda: self.win.navigate("wishlist"))
             m.addAction(icons.icon("external"), "GOG account settings",
                         lambda: xdg_open("https://www.gog.com/en/account/settings"))
             m.addSeparator()

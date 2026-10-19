@@ -227,9 +227,9 @@ class HomePage(Page):
             wish = gog.wishlist() if gog.connected() else set()
             sale = gog.catalog(discounted=True, order="desc:trending", limit=16).get("products", [])
             wished = []
-            if wish:
+            if wish and gog.wishlist_available():
                 try:
-                    wished = gog.catalog(product_ids=sorted(wish)[:50], limit=50).get("products", [])
+                    wished = gog.wishlist_products(sorted(wish)[:48])
                 except Exception:  # noqa: BLE001
                     wished = []
             return owned, wish, sale, wished

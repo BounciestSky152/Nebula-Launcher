@@ -290,7 +290,7 @@ class StorePage(Page):
         pid = str(it.get("id"))
         m = QMenu(self)
         m.addAction(icons.icon("store"), "Open", lambda: self.win.navigate("product", it))
-        if self.gog.connected() and pid not in self.owned:
+        if self.gog.wishlist_available() and pid not in self.owned:
             if pid in self.wishlist:
                 m.addAction(icons.icon("heart"), "Remove from wishlist", lambda: self._set_wish(it, False))
             else:
@@ -339,12 +339,9 @@ class StorePage(Page):
             if self.wishlist_mode:
                 if not self.gog.connected():
                     return owned, wish, {"products": [], "pages": 1, "_login": True}
-                ids = sorted(wish)
-                products = []
-                for i in range(0, len(ids), 48):  # the catalog serves at most 48 products per request
-                    products += self.gog.catalog(product_ids=ids[i:i + 48], limit=48, order="desc:trending",
-                                                 product_types="in:game,pack,dlc,extras").get("products", [])
-                return owned, wish, {"products": products, "pages": 1}
+                if not self.gog.wishlist_available():
+                    return owned, wish, {"products": [], "pages": 1, "_private": True}
+                return owned, wish, {"products": self.gog.wishlist_products(wish), "pages": 1}
             data = self.gog.catalog(query=self.search.text().strip(), page=1, order=self.order.currentData(),
                                     linux_only=self.linux.isChecked(), discounted=self.sale.isChecked())
             return owned, wish, data
@@ -371,6 +368,8 @@ class StorePage(Page):
             self.grid.model_.append(products)
         if data.get("_login"):
             self.status.setText("Sign in to GOG to see your wishlist.")
+        elif data.get("_private"):
+            self.status.setText("GOG doesn't share your wishlist with Nebula.")
         elif reset and not products:
             self.status.setText("Your wishlist is empty." if self.wishlist_mode else "No products found.")
         elif reset:
@@ -477,7 +476,7 @@ class ProductPage(Page):
         owned = pid in self.gog.owned_ids() if self.gog.connected() else False
         self.go.setVisible(owned)
         self.buy.setVisible(not owned)
-        self.wish.setVisible(self.gog.connected() and not owned)
+        self.wish.setVisible(self.gog.wishlist_available() and not owned)
         wished = pid in (self.gog.wishlist() if self.gog.connected() else set())
         self.wish.setChecked(wished)
         self.wish.setIcon(icons.icon("heart", theme.DANGER if wished else theme.TEXT_DIM))
