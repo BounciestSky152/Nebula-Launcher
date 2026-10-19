@@ -178,7 +178,15 @@ def _install_icon() -> None:
     data = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
     dst = data / "icons" / "hicolor" / "scalable" / "apps" / f"{APP_ID}.svg"
     try:
-        if dst.parent.is_dir() and (not dst.exists() or dst.read_bytes() != src.read_bytes()):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if not dst.exists() or dst.read_bytes() != src.read_bytes():
             dst.write_bytes(src.read_bytes())
+        # point the launcher entry at the file itself: desktops cache themed icons by name
+        entry = data / "applications" / f"{APP_ID}.desktop"
+        if entry.exists():
+            text = entry.read_text()
+            fixed = "\n".join(f"Icon={dst}" if line.startswith("Icon=") else line for line in text.splitlines()) + "\n"
+            if fixed != text:
+                entry.write_text(fixed)
     except OSError:
         pass
