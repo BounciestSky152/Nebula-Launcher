@@ -40,7 +40,7 @@ achievements and GOG friends sit at the centre of the app, the way they do in GO
 
 ## Game versions
 
-Every installed GOG game has a **Version** card on its page and matching rows in the Info tab.
+Every GOG game has a **Version** card on its page and matching rows in the Info tab. For a game you haven't installed yet, the card shows the newest version GOG offers and an *Install* button.
 
 ![Version card](docs/screenshots/version-card.png)
 

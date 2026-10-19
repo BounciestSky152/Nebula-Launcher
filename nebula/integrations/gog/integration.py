@@ -936,7 +936,7 @@ class GogIntegration(Integration):
 
     def version_info(self, game: Game, fetch: bool = True, refresh: bool = False) -> base.VersionInfo | None:
         if not game.installed:
-            return None
+            return self._available_info(game, fetch, refresh)
         pid = game.source_id
         rec = self.install_record(pid)
         if not rec:
@@ -987,6 +987,53 @@ class GogIntegration(Integration):
                 self._save_summary(pid, rec, info, match)
             except Exception as exc:  # noqa: BLE001
                 log.debug("could not save the version summary for %s: %s", game.title, exc)
+        return info
+
+    def _available_info(self, game: Game, fetch: bool, refresh: bool) -> base.VersionInfo:
+        """A game that isn't installed: the newest version GOG offers for the platform Nebula would install."""
+        platform = self.default_platform(game)
+        info = base.VersionInfo(kind="builds" if platform == "windows" else "installer", platform=platform,
+                                status="not_installed")
+        if not self.connected():
+            info.error, info.error_text = "signed_out", "Sign in to GOG to see the newest version."
+            return info
+        pid = game.source_id
+        try:
+            if platform == "windows":
+                hit = self._builds(pid, "windows", fetch, refresh)
+                if hit is None:  # nothing fetched yet and fetch=False
+                    info.stale = True
+                    return info
+                ts, builds, expired = hit
+                info.stale, info.checked_at = expired or not fetch, ts
+                if builds:
+                    latest = content.Gen2.latest(builds, None) or builds[0]  # a newer beta is never the default
+                    info.latest = self._build_ref(latest, newest=True)
+                    info.branches = ["" if br is None else br for br in content.Gen2.branches(builds)]
+                    return info
+                info.kind = "installer"  # no Galaxy builds: Nebula installs GOG's offline installer
+            hit = self._installers(pid, fetch, refresh)
+            if hit is None:
+                info.stale = True
+                return info
+            ts, items, expired = hit
+            info.stale, info.checked_at = expired or not fetch, ts
+            inst = offline.pick_installer([i for i in items if i.get("os") == platform],
+                                          self.settings.get("general.language") or "en")
+            if inst is None:
+                info.error = "failed"
+                info.error_text = f"GOG doesn't offer a {'Linux' if platform == 'linux' else 'Windows'} installer."
+            else:
+                info.latest = base.BuildRef(version=str(inst.get("version") or ""),
+                                            size=int(inst.get("total_size") or 0), newest=True)
+        except OSError as exc:
+            log.debug("version check for %s failed: %s", game.title, exc)
+            info.error, info.error_text = "offline", "Couldn't reach GOG. Check your connection and try again."
+        except ApiError as exc:
+            info.error, info.error_text = "failed", f"GOG returned an error ({exc})."
+        except Exception as exc:  # noqa: BLE001
+            log.info("version check for %s failed: %s", game.title, exc)
+            info.error, info.error_text = "failed", str(exc)
         return info
 
     def _compare_builds(self, info: base.VersionInfo, rec: dict, builds: list[dict]) -> dict | None:

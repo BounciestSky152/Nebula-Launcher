@@ -659,7 +659,7 @@ class GamePage(Page):
                     m.addAction(icons.icon("play"), f"Play on {self.s.integration(other.source).name}",
                                 lambda o=other: self.ctl.play(e, o.uid))
             vg = self._vgame()
-            vi = self.s.integration(vg.source).version_info(vg, fetch=False) if vg else None
+            vi = self.s.integration(vg.source).version_info(vg, fetch=False) if vg and vg.installed else None
             if vi and vi.kind == "builds":
                 m.addAction(icons.icon("history"), "Change version…", lambda: self._version_change())
             m.addSeparator()
@@ -678,10 +678,12 @@ class GamePage(Page):
         e = (self.s.library.entry(self.key) or self.entry) if self.key else None
         if not e:
             return None
-        for g in [e.primary] + e.games:
+        copies = [e.primary] + e.games
+        for g in copies:
             if g.installed and self.s.integration(g.source).supports(base.VERSIONS):
                 return g
-        return None
+        # not installed anywhere version-managed: the card shows the newest version and an Install button
+        return next((g for g in copies if self.s.integration(g.source).supports(base.VERSIONS)), None)
 
     def _busy(self, g) -> str:
         if self.s.jobs.active_for(g.uid):
@@ -692,7 +694,8 @@ class GamePage(Page):
 
     @staticmethod
     def _sig(g) -> tuple:
-        return g.uid, g.build_id, g.version  # offline installs have no build id, so the version counts too
+        # offline installs have no build id, so the version counts too
+        return g.uid, g.build_id, g.version, g.installed
 
     def _cached_vinfo(self, g):
         """The last live check if it is about ``g``'s current install, with the pin / auto-update settings
@@ -797,6 +800,9 @@ class GamePage(Page):
     def _version_update(self) -> None:
         g, v = self._vgame(), self.version_card.view
         if g is None or v is None or not v.update_visible:
+            return
+        if v.update_change == "install":
+            self.ctl.install(g)
             return
         job = self.s.actions.update(g, version=v.update_version, change=v.update_change, label=v.update_label)
         if job:
@@ -1123,6 +1129,13 @@ class GamePage(Page):
                 rows.append(("Version", str(inst.version or inst.build_id or "")))
             if inst.platform == "windows" and inst.source not in ("steam", "lutris"):
                 rows.append(("Proton prefix", str(self.s.compat.prefix_for(inst.uid))))
+        else:
+            vg = self._vgame()
+            info = self._version_info(vg) if vg else None
+            if info is not None and info.latest is not None:
+                where = "current installer" if info.kind == "installer" else "Windows version"
+                rows.append(("Newest version", f"{info.latest.label} ({self.s.integration(vg.source).name} "
+                                               f"{where})"))
         if details is not None and getattr(details, "languages", None):
             rows.append(("Languages", ", ".join(details.languages[:12])))
         r = 0

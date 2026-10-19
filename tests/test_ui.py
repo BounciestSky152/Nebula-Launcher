@@ -480,3 +480,31 @@ def test_game_settings_three_way_merge(qapp, services, errors, monkeypatch, tmp_
     dlg._save()  # noqa: SLF001
     assert pins == [(g.uid, True)] and services.db.get_config(g.uid)["pin_version"] is True
     assert not errors, errors
+
+
+def test_version_card_for_game_not_installed(qapp, services, errors, monkeypatch, tmp_path):
+    """Every GOG game page shows the newest version, through the real integration (only HTTP is faked)."""
+    services.db.replace_source("gog", [Game("gog", "321", "Not Yet", os_support=["windows"])])
+    services.library.load()
+    w, gog = _version_window(qapp, services, monkeypatch)
+    builds = [{"build_id": "b3", "version_name": "2.1 beta", "branch": "beta", "generation": 2,
+               "date_published": "2024-03-01T00:00:00+0000"},
+              {"build_id": "b2", "version_name": "2.0", "branch": None, "generation": 2,
+               "date_published": "2024-02-01T00:00:00+0000"}]
+    monkeypatch.setattr(gog.api, "builds", lambda pid, os_name, generation=2: list(builds))
+    installs = []
+    monkeypatch.setattr(w.ctl, "install", lambda g: installs.append(g.uid))
+    gp, card = w.pages["game"], w.pages["game"].version_card
+    w.navigate("game", services.library.entry_for_uid("gog:321").key)
+    pump(qapp, until=lambda: card.new_value.text() == "2.0")
+    assert card.isVisible() and card.cur_value.text() == "Not installed"
+    assert card.new_value.text() == "2.0", "the newest Stable build, not the newer beta"
+    assert card.update_btn.text() == "Install 2.0…" and not card.change_btn.isVisible()
+    assert not card.pin_cb.isVisible()
+    card.update_btn.click()
+    assert installs == ["gog:321"]
+    gp.tabs.setCurrentIndex(4)
+    pump(qapp, 0.1)
+    texts = [gp.info_grid.itemAt(i).widget().text() for i in range(gp.info_grid.count())]
+    assert "NEWEST VERSION" in texts and any(t.startswith("2.0") for t in texts)
+    assert not errors, errors

@@ -113,7 +113,10 @@ def test_version_info_stable_ignores_newer_beta(gog, monkeypatch, tmp_path):
     assert info.method == "GOG Galaxy builds · Windows version (runs with Proton)"
     saved = gog.install_record("123")["latest"]
     assert saved["id"] == "b2" and saved["for"] == "b1" and saved["status"] == "behind" and saved["update_available"]
-    assert gog.version_info(Game("gog", "999", "Not installed")) is None
+    # not installed: the newest Stable build Nebula would install (never the newer beta), no installed version
+    avail = gog.version_info(Game("gog", "123", "Not installed", os_support=["windows"]))
+    assert avail.status == "not_installed" and avail.latest.id == "b2" and avail.installed.id == ""
+    assert avail.branches == ["", "public_beta"] and not avail.update_available
     assert gog.version_info(Game("gog", "555", "No record", installed=True)) is None
 
 

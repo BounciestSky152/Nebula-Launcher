@@ -216,6 +216,12 @@ def describe_version(info, *, loading: bool = False, busy: str = "", global_auto
         v.status_text = "Nebula can't manage versions for this copy."
         v.refresh_visible = v.toggles_visible = False
         return v
+    if info.status == "not_installed":
+        _not_installed_state(v, info, store, loading)
+        tip = BUSY_TIPS.get(busy)
+        if tip:
+            v.update_enabled, v.update_tip = False, tip
+        return v
     v.change_visible = builds
     if info.error == "signed_out":
         v.newest_text, v.newest_obj = (latest.label if latest else "—"), "Faint"
@@ -249,6 +255,43 @@ def describe_version(info, *, loading: bool = False, busy: str = "", global_auto
         v.update_enabled = v.change_enabled = False
         v.update_tip = v.change_tip = tip
     return v
+
+
+def _not_installed_state(v: VersionView, info, store: str, loading: bool) -> None:
+    """A game that isn't installed: what Nebula would install, and an Install button."""
+    latest = info.latest
+    v.installed_text, v.installed_sub, v.chip_text = "Not installed", "", ""
+    v.toggles_visible = v.change_visible = False
+    if info.kind == "installer":
+        os_name = "Linux" if info.platform == "linux" else "Windows"
+        sub = _join(f"{store}'s current {os_name} installer", latest and latest.size and human_size(latest.size))
+    else:
+        date = nice_date(latest.date) if latest else ""
+        sub = _join(date and f"Released {date}", "Windows version, runs with Proton")
+    if info.error == "signed_out":
+        v.newest_text, v.newest_obj = "—", "Faint"
+        v.status_text = f"Sign in to {store} to see the newest version."
+        v.signin_visible, v.refresh_visible = True, False
+        return
+    if latest:
+        v.newest_text, v.newest_sub = latest.label, sub
+    elif loading:
+        v.newest_text, v.newest_obj = f"Checking {store} for the newest version…", "Faint"
+    elif info.error:
+        v.newest_text, v.newest_obj = ("Couldn't reach " + store if info.error == "offline"
+                                       else f"{store} returned an error"), "Error"
+        v.status_text, v.status_obj = info.error_text, "Error"
+    else:
+        v.newest_text, v.newest_obj = "—", "Faint"
+    v.newest_loading = loading
+    v.refresh_enabled = not loading
+    others = [b for b in info.branches if b]
+    if others:
+        v.channel_text = f"Stable · {len(others)} beta channel{'s' if len(others) != 1 else ''} available"
+    v.update_visible = True
+    v.update_text = f"Install {latest.label}…" if latest and latest.version else "Install…"
+    v.update_change, v.update_primary = "install", True
+    v.update_tip = "Choose the platform, language, DLC, version and folder"
 
 
 def _plain(lb):
