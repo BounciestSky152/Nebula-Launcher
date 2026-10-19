@@ -77,14 +77,15 @@ class FriendsService(QObject):
         tasks.run_async(self._gather, on_done=self._done, on_error=lambda _e: setattr(self, "loading", False))
 
     def _gather(self) -> list[Friend]:
-        out: list[Friend] = []
-        for integ in self.s.integrations.values():
-            if integ.supports(FRIENDS) and integ.enabled() and integ.connected():
-                try:
-                    out += integ.friends()
-                except Exception as exc:  # noqa: BLE001
-                    log.info("friends from %s failed: %s", integ.id, exc)
-        return out
+        """Friends come from GOG only (the friends list is GOG's, like in Galaxy)."""
+        gog = self.s.integrations.get("gog")
+        if gog is None or not (gog.supports(FRIENDS) and gog.enabled() and gog.connected()):
+            return []
+        try:
+            return list(gog.friends())
+        except Exception as exc:  # noqa: BLE001
+            log.info("GOG friends failed: %s", exc)
+            return []
 
     def _done(self, friends: list[Friend]) -> None:
         self.loading = False
