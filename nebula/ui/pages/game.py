@@ -1,6 +1,9 @@
 """Game details page."""
 from __future__ import annotations
 
+import copy
+import dataclasses
+import time
 from datetime import datetime
 
 from PySide6.QtCore import QSize, Qt
@@ -10,10 +13,18 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QFrame, QGridLayout, QHBoxLay
 from nebula.core import tasks
 from nebula.core.utils import eta_text, human_duration, human_size, human_speed, playtime_text, relative_time, xdg_open
 from nebula.integrations import base
+from nebula.integrations.gog.content import branch_label, nice_date
 from nebula.ui import icons, theme
 from nebula.ui.pages.base import Page
 from nebula.ui.widgets.common import (FlowLayout, HeroBanner, PlatformBadges, RemoteImage, Spinner, StarRating,
                                       button, card, clear_layout, icon_button, label)
+from nebula.ui.widgets.version_card import VersionCard, describe_version
+
+
+def _rel(ts: float) -> str:
+    """relative_time() inside a sentence: "yesterday", "3 days ago", "13 Jun 2023"."""
+    s = relative_time(ts)
+    return s if s[:1].isdigit() else s[:1].lower() + s[1:]
 
 
 class ImageViewer(QDialog):
@@ -65,6 +76,13 @@ class GamePage(Page):
         self.entry = None
         self._details_cache: dict[str, object] = {}
         self._ach_uid = ""
+        # version card: the last live VersionInfo and the install signature (uid, build_id, version) it is for
+        self._vinfo = None
+        self._vsig = None
+        self._vreq = None  # signature being loaded
+        self._vloading = False
+        self._vtoken = 0
+        self._vat = 0.0  # monotonic time of the last live VersionInfo
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         self.area = QScrollArea()
@@ -99,6 +117,11 @@ class GamePage(Page):
         self.chips = QHBoxLayout()
         self.chips.setSpacing(6)
         prow.addLayout(self.chips)
+        self.branch_chip = label("", "FeatureChip")  # "Beta: Public beta"; kept out of the rebuilt chip row
+        self.branch_chip.setTextFormat(Qt.TextFormat.PlainText)
+        self.branch_chip.hide()
+        prow.addSpacing(6)
+        prow.addWidget(self.branch_chip)
         prow.addStretch(1)
         hl.addLayout(prow)
         hl.addSpacing(14)
@@ -223,6 +246,7 @@ class GamePage(Page):
         bus.game_stopped.connect(lambda *_: self._refresh_header())
         bus.game_preparing.connect(lambda *_: self._refresh_actions())
         bus.achievements_changed.connect(lambda _u: self._load_achievements(force=False) if self.isVisible() else None)
+        bus.integration_changed.connect(lambda i: self._on_integration(i))
 
     # ------------------------------------------------------------ builders
     def _section(self) -> tuple[QWidget, QVBoxLayout]:
@@ -290,6 +314,16 @@ class GamePage(Page):
         self._gog_item = None
         self.gog_offer.hide()
         right.addWidget(self.gog_offer)
+        self.version_card = VersionCard()
+        self.version_card.hide()
+        vc = self.version_card
+        vc.update_requested.connect(lambda: self._version_update())
+        vc.change_requested.connect(lambda: self._version_change())
+        vc.refresh_requested.connect(lambda: self._load_version(force=True))
+        vc.signin_requested.connect(lambda: self.ctl.gog_login())
+        vc.pin_toggled.connect(lambda on: self._version_pin(on))
+        vc.auto_toggled.connect(lambda on: self._version_auto(on))
+        right.addWidget(vc)
         tags_card = card()
         tcl = QVBoxLayout(tags_card)
         tcl.setContentsMargins(16, 14, 16, 14)
@@ -382,6 +416,7 @@ class GamePage(Page):
         self.changelog = label("", wrap=True)
         self.changelog.setStyleSheet(f"color:{theme.TEXT_DIM};")
         lay.addWidget(self.changelog)
+        lay.addStretch(1)  # the tab stack is as tall as the longest tab: keep the rows compact
         return w
 
     # -------------------------------------------------------------- data
@@ -391,11 +426,15 @@ class GamePage(Page):
                 self.tabs.setCurrentIndex(0)
                 self._achievements = []
                 self._ach_uid = ""
+                self._vinfo = self._vsig = self._vreq = None
+                self._vloading = False
+                self._vtoken += 1  # results still loading for the previous game are dropped
             self.key = arg
         self.area.verticalScrollBar().setValue(0)
         self._refresh_header()
         self._load_details()
         self._load_gog_offer()
+        self._load_version()
         if self.tabs.currentIndex() == 1:
             self._load_achievements()
 
@@ -463,8 +502,9 @@ class GamePage(Page):
                 self.st_run.set("Linux", "Native build")
             else:
                 self.st_run.set(self.s.integration(inst.source).name, "Platform client")
+            ver = str(inst.version or "")
             self.st_size.set(human_size(inst.install_size) if inst.install_size else "—",
-                             f"v{inst.version}" if inst.version and len(inst.version) < 24 else "")
+                             f"v{ver}" if ver and len(ver) < 24 else "")
         else:
             self.st_run.set("—")
             self.st_size.set("Not installed")
@@ -473,6 +513,7 @@ class GamePage(Page):
         self._render_overview_local()
         self._render_activity()
         self._render_info()
+        self._render_version()
 
     def _render_chips(self, e) -> None:
         clear_layout(self.chips)
@@ -554,6 +595,7 @@ class GamePage(Page):
         self.play.style().polish(self.play)
         if job:
             self._job_progress(job.id)
+        self._render_version()  # busy state (running / downloading) follows jobs and launches
 
     def _job_progress(self, job_id: str) -> None:
         if not self.entry or not self.isVisible():
@@ -561,8 +603,8 @@ class GamePage(Page):
         job = self.s.jobs.get(job_id)
         if not job or job.uid not in [g.uid for g in self.entry.games]:
             return
-        verb = {"install": "Installing", "update": "Updating", "repair": "Verifying", "uninstall": "Uninstalling",
-                "dlc": "Installing DLC"}.get(job.kind, job.kind.title())
+        verb = job.verb or {"install": "Installing", "update": "Updating", "repair": "Verifying",
+                            "uninstall": "Uninstalling", "dlc": "Installing DLC"}.get(job.kind, job.kind.title())
         self.job_text.setText(f"{verb} — {job.stage}")
         self.job_bar.setValue(int(job.progress * 1000))
         parts = []
@@ -603,7 +645,7 @@ class GamePage(Page):
         if state in ("installed", "update"):
             g = self.ctl.installed_game(e)
             integ = self.s.integration(g.source)
-            if state == "update":
+            if state == "update" and self.ctl.update_target(e) is not None:  # UPDATE updates rather than plays
                 m.addAction(icons.icon("play"), "Play without updating", lambda: self.ctl.play(e))
             for t in integ.launch_tasks(g):
                 if t.primary and state != "update":
@@ -616,6 +658,10 @@ class GamePage(Page):
                 if other.installed and other is not g:
                     m.addAction(icons.icon("play"), f"Play on {self.s.integration(other.source).name}",
                                 lambda o=other: self.ctl.play(e, o.uid))
+            vg = self._vgame()
+            vi = self.s.integration(vg.source).version_info(vg, fetch=False) if vg else None
+            if vi and vi.kind == "builds":
+                m.addAction(icons.icon("history"), "Change version…", lambda: self._version_change())
             m.addSeparator()
             m.addAction(icons.icon("settings"), "Game settings…", lambda: self.ctl.settings(g))
         elif state == "not_installed":
@@ -625,6 +671,195 @@ class GamePage(Page):
                     m.addAction(icons.icon("download"), f"Install from {integ.name}", lambda g=g: self.ctl.install(g))
         if m.isEmpty():
             m.addAction("No other options").setEnabled(False)
+
+    # ------------------------------------------------------------ version
+    def _vgame(self):
+        """The installed copy the version card is about (not ctl.installed_game, which may pick Steam's)."""
+        e = (self.s.library.entry(self.key) or self.entry) if self.key else None
+        if not e:
+            return None
+        for g in [e.primary] + e.games:
+            if g.installed and self.s.integration(g.source).supports(base.VERSIONS):
+                return g
+        return None
+
+    def _busy(self, g) -> str:
+        if self.s.jobs.active_for(g.uid):
+            return "job"
+        if self.s.launcher.is_running(g.uid) or g.uid in self.s.launcher.preparing:
+            return "running"
+        return ""
+
+    @staticmethod
+    def _sig(g) -> tuple:
+        return g.uid, g.build_id, g.version  # offline installs have no build id, so the version counts too
+
+    def _cached_vinfo(self, g):
+        """The last live check if it is about ``g``'s current install, with the pin / auto-update settings
+        read again (the card's toggles change them without a new check)."""
+        if self._vinfo is None or self._vsig != self._sig(g):
+            return None
+        cfg = self.s.db.get_config(g.uid)
+        return dataclasses.replace(self._vinfo, pinned=bool(cfg.get("pin_version")),
+                                   auto_update=cfg.get("auto_update", True) is not False)
+
+    def _version_info(self, g):
+        """What the page shows about ``g``'s version; never touches the network."""
+        return self._cached_vinfo(g) or self.s.integration(g.source).version_info(g, fetch=False)
+
+    def _fresh_vinfo(self):
+        """The last live check if it is recent enough to open the change-version dialog with, else None."""
+        g = self._vgame()
+        info = self._cached_vinfo(g) if g else None
+        if info is None or info.stale or info.error or time.monotonic() - self._vat >= 60:
+            return None
+        return info
+
+    def _render_version(self) -> None:
+        g = self._vgame()
+        info = self._version_info(g) if g else None
+        if info is None:
+            self.version_card.hide()
+            self.branch_chip.hide()
+            return
+        integ = self.s.integration(g.source)
+        e = self.s.library.entry(self.key) or self.entry
+        v = describe_version(info, loading=self._vloading, busy=self._busy(g),
+                             global_auto=bool(self.s.settings.get("downloads.auto_update")), store=integ.name,
+                             multi_source=len(e.sources) > 1)
+        self.version_card.set_view(v)
+        self.version_card.setVisible(v.visible)
+        self.branch_chip.setText(v.chip_text)
+        self.branch_chip.setVisible(bool(v.chip_text))
+        sig = self._sig(g)
+        if self.isVisible() and integ.connected() and self._vsig != sig and self._vreq != sig:
+            self._load_version()  # e.g. an update or rollback finished: check the new install
+
+    def _load_version(self, force: bool = False) -> None:
+        """Check for the newest version in a worker; skipped while the last check is recent."""
+        g = self._vgame()
+        integ = self.s.integration(g.source) if g else None
+        if g is None or not integ.connected() or self._version_info(g) is None:
+            self._render_version()  # nothing to check, or signed out (the card offers to sign in)
+            return
+        sig = self._sig(g)
+        recent = self._vsig == sig and self._vinfo is not None and not self._vinfo.error \
+            and time.monotonic() - self._vat < 300
+        if not force and (recent or self._vreq == sig):  # checked lately, or a check is running
+            return
+        self._vtoken += 1
+        token, key = self._vtoken, self.key
+        self._vreq, self._vloading = sig, True
+        self._render_version()
+        tasks.run_async(integ.version_info, copy.deepcopy(g), True, force,
+                        on_done=lambda i, t=token, s=sig, k=key: self._version_loaded(t, s, k, i),
+                        on_error=lambda e, t=token, s=sig, k=key: self._version_failed(t, s, k, e))
+
+    def _version_loaded(self, token: int, sig: tuple, key: str, info) -> None:
+        if token != self._vtoken or key != self.key:
+            return
+        self._vloading, self._vreq = False, None
+        g = self._vgame()
+        if g is None or self._sig(g) != sig:
+            self._render_version()  # the install changed meanwhile: this checks the new one
+            return
+        self._vinfo, self._vsig, self._vat = info, sig, time.monotonic()
+        if not self.s.actions.apply_version_info(g.uid, sig[1], info):
+            self._render_version()
+            self._render_info()
+        # else the game changed (update flag / version name) and game_changed re-renders the page
+
+    def _version_failed(self, token: int, sig: tuple, key: str, exc) -> None:
+        if token != self._vtoken or key != self.key:
+            return
+        self._vloading, self._vreq = False, None
+        g = self._vgame()
+        if g is None or self._sig(g) != sig:
+            self._render_version()
+            return
+        info = self.s.integration(g.source).version_info(g, fetch=False)
+        if info is not None:
+            info.error, info.error_text = "failed", f"Couldn't check for updates: {exc}"
+        self._vinfo, self._vsig, self._vat = info, sig, time.monotonic()
+        self._render_version()
+
+    def _on_integration(self, integ_id: str) -> None:
+        """Signed in or out: the card switches between the sign-in prompt and a live check."""
+        g = self._vgame()
+        if not self.isVisible() or g is None or g.source != integ_id:
+            return
+        self._vinfo = self._vsig = self._vreq = None
+        self._vloading = False
+        self._vtoken += 1
+        self._load_version(force=True)
+        self._refresh_header()
+
+    def _version_update(self) -> None:
+        g, v = self._vgame(), self.version_card.view
+        if g is None or v is None or not v.update_visible:
+            return
+        job = self.s.actions.update(g, version=v.update_version, change=v.update_change, label=v.update_label)
+        if job:
+            self.win.toast(g.title, f"{job.verb} — added to the download queue")
+
+    def _version_change(self) -> None:
+        g = self._vgame()
+        if g is not None:
+            self.ctl.versions(g, self._fresh_vinfo())
+
+    def _version_pin(self, on: bool) -> None:
+        g = self._vgame()
+        if g is None:
+            return
+        self.s.actions.set_version_pin(g, on)  # game_changed re-renders the card and the PLAY button
+        if not on:
+            self._load_version(force=True)  # whether an update is due again
+
+    def _version_auto(self, on: bool) -> None:
+        g = self._vgame()
+        if g is None:
+            return
+        self.s.db.update_config(g.uid, auto_update=on)
+        self._render_version()
+        self._render_info()
+
+    def _version_rows(self, g, info, other: bool) -> list[tuple[str, str]]:
+        """Info tab rows about the installed version (``other``: ``g`` isn't the copy the page shows first)."""
+        name = self.s.integration(g.source).name
+        inst, latest, builds = info.installed, info.latest, info.kind == "builds"
+        mine = inst.label
+        newest = ""
+        if latest is not None:
+            if info.kind == "installer":
+                newest = f"{latest.label} ({name}'s current installer)"
+            elif info.status == "up_to_date":
+                newest = f"{latest.label} (installed)"
+            elif info.branch_gone:
+                newest = f"{latest.label} (Stable)"
+            else:
+                newest = latest.label
+            if info.stale and info.checked_at:
+                newest += f" — last checked {_rel(info.checked_at)}"
+        if info.kind not in ("builds", "installer"):
+            updates = ""
+        elif info.pinned:
+            updates = f"Off — staying on {mine}"
+        elif not info.auto_update:
+            updates = "Manual (you'll be notified)"
+        elif not self.s.settings.get("downloads.auto_update"):
+            updates = "Manual (automatic updates are off in Settings › Downloads)"
+        else:
+            updates = "Automatic"
+        return [
+            (f"{name} version" if other else "Version",
+             f"{mine} (build {inst.id})" if builds and inst.id and inst.version else mine),
+            ("Channel", branch_label(inst.branch) if builds else ""),
+            ("Version released", nice_date(inst.date)),
+            ("Last updated", datetime.fromtimestamp(info.updated_at).strftime("%d %b %Y") if info.updated_at else ""),
+            ("Newest version", newest),
+            ("Installed with", info.method),
+            ("Updates", updates),
+        ]
 
     # ---------------------------------------------------------- overview
     def _toggle_desc(self) -> None:
@@ -879,7 +1114,13 @@ class GamePage(Page):
             ("Added", datetime.fromtimestamp(e.added_at).strftime("%d %b %Y") if e.added_at else ""),
         ]
         if inst:
-            rows += [("Install location", inst.install_path), ("Version", inst.version or inst.build_id)]
+            rows.append(("Install location", inst.install_path))
+            vg = self._vgame()
+            info = self._version_info(vg) if vg else None
+            if info is not None:
+                rows += self._version_rows(vg, info, other=vg is not inst)
+            else:
+                rows.append(("Version", str(inst.version or inst.build_id or "")))
             if inst.platform == "windows" and inst.source not in ("steam", "lutris"):
                 rows.append(("Proton prefix", str(self.s.compat.prefix_for(inst.uid))))
         if details is not None and getattr(details, "languages", None):
@@ -890,7 +1131,8 @@ class GamePage(Page):
                 continue
             self.info_grid.addWidget(label(k.upper(), "StatLabel"), r, 0, Qt.AlignmentFlag.AlignTop)
             val = label(str(v), wrap=True, selectable=True)
-            self.info_grid.addWidget(val, r, 1)
+            val.setTextFormat(Qt.TextFormat.PlainText)  # names and versions come from store APIs
+            self.info_grid.addWidget(val, r, 1, Qt.AlignmentFlag.AlignTop)
             r += 1
         self.info_grid.setColumnStretch(1, 1)
         clear_layout(self.links_row)

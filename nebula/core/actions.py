@@ -9,12 +9,20 @@ from PySide6.QtCore import QTimer
 from nebula.core import shortcuts, tasks
 from nebula.core.models import Game
 from nebula.core.utils import xdg_open
-from nebula.integrations.base import UPDATE, InstallRequest
+from nebula.integrations.base import UPDATE, VERSIONS, InstallRequest
 from nebula.runners import manager as runner_manager
 
 log = logging.getLogger(__name__)
 
 HANDOFF_SOURCES = ("steam", "lutris")
+
+# kind of version change -> (job title prefix, in-progress verb, done verb, done message without a label)
+CHANGES = {
+    "update": ("Updating", "Updating", "Updated", "Update complete"),
+    "rollback": ("Rolling back", "Rolling back", "Rolled back", "Version changed"),
+    "switch": ("Switching channel for", "Switching", "Switched", "Channel changed"),
+    "change": ("Changing version of", "Changing version", "Version changed", "Version changed"),
+}
 
 
 class Actions:
@@ -25,7 +33,8 @@ class Actions:
     def bus(self):
         return self.s.bus
 
-    def _job(self, game: Game, kind: str, title: str, fn, done_msg: str = "", request: InstallRequest | None = None):
+    def _job(self, game: Game, kind: str, title: str, fn, done_msg: str = "", request: InstallRequest | None = None,
+             verb: str = "", verb_done: str = ""):
         integ = self.s.integration(game.source)
         work = copy.deepcopy(game)
 
@@ -50,7 +59,7 @@ class Actions:
             title=game.title, kind=kind, uid=game.uid,
             func=lambda ctx: fn(integ, work, ctx),
             can_pause=game.source in ("gog",) and kind != "uninstall",
-            on_success=ok, on_failure=fail,
+            on_success=ok, on_failure=fail, verb=verb, verb_done=verb_done,
         )
 
     def _poll_source(self, source: str) -> None:
@@ -63,11 +72,67 @@ class Actions:
                          lambda integ, g, ctx: integ.install(g, request, ctx),
                          "Installation complete" if game.source not in HANDOFF_SOURCES else "", request)
 
-    def update(self, game: Game, version: str = ""):
-        label = "Rolling back" if version else "Updating"
-        return self._job(game, "update", f"{label} {game.title}",
+    def busy_reason(self, game: Game) -> str:
+        """Why the installed files can't be changed right now ("" = they can)."""
+        if self.s.launcher.is_running(game.uid) or game.uid in self.s.launcher.preparing:
+            return "Close the game first."
+        if self.s.jobs.active_for(game.uid):
+            return "Wait for the current download for this game to finish."
+        return ""
+
+    def update(self, game: Game, version: str = "", change: str = "", label: str = ""):
+        """Update, roll back or switch channel. ``version`` as in Integration.update; ``change`` is a CHANGES key
+        and ``label`` the target shown in the queue ("1.0" -> "Rolling back to 1.0"). None when the game is busy."""
+        reason = self.busy_reason(game)
+        if reason:
+            self.bus.error.emit(game.title, reason)
+            return None
+        change = change or ("change" if version else "update")
+        prefix, ing, ed, default_done = CHANGES[change]
+        verb = f"{ing} to {label}" if label else ing
+        done = f"{ed} to {label}" if label else default_done
+        return self._job(game, "update", f"{prefix} {game.title}",
                          lambda integ, g, ctx: integ.update(g, ctx, version),
-                         "Version changed" if version else "Update complete")
+                         done, verb=verb, verb_done=done)
+
+    def set_version_pin(self, game: Game, pinned: bool) -> None:
+        """Turn "stay on this version" on or off and recompute the update flag without touching the network."""
+        self.s.db.update_config(game.uid, pin_version=bool(pinned))
+        g = self.s.library.game(game.uid)
+        if g is None:
+            return
+        if pinned:
+            g.update_available = False
+        else:
+            integ = self.s.integration(g.source)
+            try:
+                info = integ.version_info(g, fetch=False) if integ.supports(VERSIONS) else None
+            except Exception as exc:  # noqa: BLE001
+                log.info("version info for %s failed: %s", g.uid, exc)
+                info = None
+            g.update_available = bool(info and info.update_available)
+        self.s.library.update_game(g)  # saves and emits game_changed (PLAY/UPDATE button, version card)
+
+    def apply_version_info(self, uid: str, build_id: str, info) -> bool:
+        """Store the update flag / version name from a live version_info() fetch (GUI thread). Results for an
+        older build, stale or failed results and games with a running job are ignored. True when it changed."""
+        g = self.s.library.game(uid)
+        if (not g or not g.installed or g.build_id != build_id or info is None or info.error or info.stale
+                or self.s.jobs.active_for(uid)):
+            return False
+        changed = False
+        pinned = bool(self.s.db.get_config(uid).get("pin_version"))  # may have changed during the fetch
+        flag = info.update_available and not pinned
+        if g.update_available != flag:
+            g.update_available = flag
+            changed = True
+        v = info.installed.version
+        if v and g.version != v:
+            g.version = v
+            changed = True
+        if changed:
+            self.s.library.update_game(g)
+        return changed
 
     def repair(self, game: Game):
         return self._job(game, "repair", f"Verify {game.title}",
@@ -96,23 +161,35 @@ class Actions:
         auto = self.s.settings.get("downloads.auto_update") if auto_update is None else auto_update
 
         def work():
-            found: list[str] = []
+            results: list[tuple[str, str, bool, str]] = []  # uid, build it was checked for, flag, version
             for integ in self.s.integrations.values():
                 if not integ.enabled() or not integ.connected():
                     continue
-                games = [g for g in self.s.library.games_for_source(integ.id) if g.installed]
+                # check copies: a job finishing meanwhile replaces the library's objects, and its result wins
+                games = [copy.deepcopy(g) for g in self.s.library.games_for_source(integ.id) if g.installed]
                 if not games:
                     continue
+                builds = {g.uid: g.build_id for g in games}
                 try:
-                    found += integ.check_updates(games)
+                    integ.check_updates(games)
                 except Exception as exc:  # noqa: BLE001
                     log.info("update check for %s failed: %s", integ.id, exc)
-                for g in games:
-                    self.s.db.save_game(g)
-            return found
+                results += [(g.uid, builds[g.uid], g.update_available, g.version) for g in games]
+            return results
 
-        def done(found: list[str]):
-            self.s.library.load()
+        def done(results: list[tuple[str, str, bool, str]]):
+            found: list[str] = []
+            for uid, build_id, flag, version in results:
+                g = self.s.library.game(uid)
+                if not g or not g.installed or g.build_id != build_id or self.s.jobs.active_for(uid):
+                    continue  # installed, updated or rolled back while we were checking
+                flag = flag and not self.s.db.get_config(uid).get("pin_version")  # pinned meanwhile
+                if g.update_available != flag or (version and g.version != version):
+                    g.update_available = flag
+                    g.version = version or g.version
+                    self.s.library.update_game(g, emit=False)
+                if flag:
+                    found.append(uid)
             self.bus.library_changed.emit()
             if found:
                 titles = [self.s.library.game(u).title for u in found if self.s.library.game(u)]
@@ -123,7 +200,7 @@ class Actions:
                     integ = self.s.integrations.get(g.source) if g else None
                     if not g or not integ or not integ.supports(UPDATE) or g.source in HANDOFF_SOURCES:
                         continue
-                    if self.s.launcher.is_running(uid) or self.s.jobs.active_for(uid):
+                    if self.busy_reason(g):
                         continue
                     if self.s.db.get_config(uid).get("auto_update", True) is False:
                         continue

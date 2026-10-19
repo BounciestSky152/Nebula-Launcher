@@ -28,10 +28,49 @@ achievements and GOG friends sit at the centre of the app, the way they do in GO
 * **Game pages show what GOG gives you:** a **DRM-FREE** badge plus Linux-native/Proton, achievements, cloud
   saves and DLC chips. For games you only own on Steam, Epic or elsewhere, an **Also on GOG.COM** card shows the
   DRM-free version with its current price.
+* **Version card on GOG game pages.** It shows the installed version, the build and when it was released and
+  installed, the channel (Stable or a beta), and the newest version GOG offers. From the card you can update to
+  the newest version, open *Change version…* to roll back or move to any other build, or switch to a beta
+  channel. Two switches control updates: *Update automatically*, and *Stay on this version*, which stops update
+  offers for that game. The Info tab lists the same details. See [Game versions](#game-versions) below.
 * **A starfield sits behind the whole window.** Glass panels let the night sky show through. A few stars twinkle
   and the odd shooting star crosses the sky, but only those few pixels are redrawn, and the animation stops
   while a game is running or the window is minimised. You can turn the stars, or just their animation, off in
   Settings › General › Appearance.
+
+## Game versions
+
+Every installed GOG game has a **Version** card on its page and matching rows in the Info tab.
+
+![Version card](docs/screenshots/version-card.png)
+
+* **The card shows:**
+  * *Installed*: the version, the GOG build number, when that build was released and when you last updated.
+  * *Channel*: Stable, or the beta you're on. It also tells you how many beta channels are available.
+  * *Newest*: the newest version on your channel, with a status: *Up to date*, *Update available*,
+    *Staying on …* or *Channel ended*.
+* **Update to <version>** downloads only what changed. You can also press the orange **UPDATE** button at the top
+  of the page; *Play without updating* is in its dropdown.
+* **Change version…** lists every build GOG publishes for the game, newest first, grouped by channel.
+  * Pick an older build to **roll back**. Only the files that differ are downloaded.
+  * Pick a build from another channel to **switch to a beta**. *Stable (recommended)* takes you back.
+  * The dialog warns you before a rollback or channel switch that could affect saves.
+  * DLC that an older build doesn't include is removed, and it comes back when you update again.
+* **Pinning:** rolling back, or choosing a version that isn't the newest, turns on **Stay on this version**.
+  Nebula then stops offering updates for that game, but still shows what the newest version is. Updating to the
+  newest version, or switching to the newest build of another channel, turns the pin off again. You can also
+  tick or untick it yourself.
+* **Update automatically** is a per-game switch. It follows the global setting in Settings › Downloads.
+* **If a beta channel ends**, Nebula never moves you back automatically, because Stable can be older than your
+  beta. The card offers *Switch to Stable* instead.
+* **Linux native versions** come from GOG's offline installers. GOG only offers the newest installer, so these
+  can be updated to the newest version but not rolled back. Older versions and beta channels are only available
+  for the Windows version (GOG Galaxy builds), which Nebula runs with Proton.
+* **Version checks** happen when you open a game page (at most every few minutes) and during the regular update
+  check. A failed check never hides an update Nebula already found. The card shows when GOG was last checked
+  and has a button to check again.
+
+![Change version](docs/screenshots/change-version.png)
 
 ## Proton: Windows games just work
 
@@ -72,7 +111,9 @@ achievements and GOG friends sit at the centre of the app, the way they do in GO
 | Choose language, DLC, version and location at install time | ✅ |
 | Download queue: pause, resume, cancel, reorder, speed limit, parallel connections | ✅ interrupted installs resume where they stopped |
 | Automatic updates and update notifications | ✅ per-game opt-out |
-| Roll back to an older version | ✅ any published build; rolling back pins the version |
+| Installed and newest version on the game page | ✅ version, build, release date, channel, last update |
+| Roll back to an older version / change version | ✅ any published build; rolling back pins the version |
+| Beta channels | ✅ public betas; switch back to Stable at any time |
 | Verify / repair game files | ✅ chunk-level MD5 verification; only broken files are re-downloaded |
 | Delta updates | ✅ unchanged chunks of changed files are reused from disk |
 | Install DLC later, uninstall | ✅ |
@@ -250,6 +291,7 @@ nebula/
   Heroic's *gogdl* and *minigalaxy*, and they are exercised against simulated servers in the test suite. Your
   first real sign-in and install is the first live run. If something fails, run `nebula --debug` and check the
   logs.
+* Password-protected GOG beta channels aren't supported yet; public beta channels are.
 * GOG cloud saves work for Windows builds, which keep their saves inside the Proton prefix. GOG doesn't publish
   cloud-save locations for its Linux builds.
 * The GOG friends list comes from an undocumented endpoint. Friends' online status isn't available, so they're

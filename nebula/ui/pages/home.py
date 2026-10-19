@@ -104,7 +104,7 @@ class HomePage(Page):
         def cover_row(width: int) -> CoverRow:
             row = CoverRow(services, width)
             row.open_entry.connect(lambda k: self.win.navigate("game", k))
-            row.play_entry.connect(ctl.primary_action)
+            row.play_entry.connect(lambda k: ctl.primary_action(k, update=False))  # the cover shows a play icon
             row.context_entry.connect(lambda k, pos: ctl.entry_menu(k).exec(pos))
             return row
 

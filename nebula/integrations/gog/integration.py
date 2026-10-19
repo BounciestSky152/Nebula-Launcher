@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shlex
 import shutil
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -27,6 +29,17 @@ from nebula.runners.compat import LaunchSpec, native_substitute
 log = logging.getLogger(__name__)
 
 INSTALLS_KEY = "gog.installs"
+VERSIONS_TTL = 600  # seconds a fetched build / installer list is reused
+SUMMARY_MAX_AGE = 3600  # rewrite the saved "newest version" summary at least this often
+
+INSTALLER_NOTES = {
+    "linux": "GOG only offers the newest Linux installer, so older versions and beta channels can't be installed "
+             "for the Linux version. They're only offered for Windows (GOG Galaxy builds), which Nebula can run "
+             "with Proton.",
+    "windows": "This copy came from GOG's offline installer, which only exists for the newest version. To choose "
+               "older versions or beta channels, uninstall it and install it again from Nebula. Nebula then uses "
+               "GOG Galaxy builds when GOG has them.",
+}
 
 
 def _split_args(text: str) -> list[str]:
@@ -40,6 +53,11 @@ def _split_args(text: str) -> list[str]:
         return list(lex)
     except ValueError:
         return text.split()
+
+
+def _norm_version(v: str) -> str:
+    """Installer version without GOG's "(gog-N)" repack suffix, which gameinfo files leave out."""
+    return re.sub(r"\s*\(gog-\d+\)\s*$", "", v.strip(), flags=re.I).lower()
 
 
 def _iso_date(value) -> str:
@@ -78,6 +96,11 @@ class GogIntegration(Integration):
         self._owned: set[str] | None = None
         self._wishlist: set[str] | None = None
         self._presence_game: str | None = None
+        # build / installer lists: key -> (monotonic time, wall time, items)
+        self._vcache: dict[tuple, tuple[float, float, list]] = {}
+        self._vlocks: dict[tuple, threading.Lock] = {}
+        self._vmeta = threading.Lock()
+        self._rec_lock = threading.RLock()  # install records are rewritten by jobs and version checks
 
     # ------------------------------------------------------------ account
     def connected(self) -> bool:
@@ -131,6 +154,7 @@ class GogIntegration(Integration):
         self.db.kv_set("gog.user", {})
         self._owned = None
         self._wishlist = None
+        self.invalidate_versions()
 
     # ------------------------------------------------------- install book
     def installs(self) -> dict:
@@ -140,19 +164,54 @@ class GogIntegration(Integration):
         return self.installs().get(str(product_id))
 
     def _set_record(self, product_id: str, rec: dict | None) -> None:
-        data = self.installs()
-        if rec is None:
-            data.pop(str(product_id), None)
-        else:
-            data[str(product_id)] = rec
-        self.db.kv_set(INSTALLS_KEY, data)
+        with self._rec_lock:
+            data = self.installs()
+            if rec is None:
+                data.pop(str(product_id), None)
+            else:
+                data[str(product_id)] = rec
+            self.db.kv_set(INSTALLS_KEY, data)
+
+    def _patch_record(self, product_id: str, expect_build: str, expect_version=None, **fields) -> bool:
+        """Merge ``fields`` into an install record, unless a job rewrote it meanwhile (compare-and-set on the
+        build id, and on the version when ``expect_version`` is given: offline installs have no build id)."""
+        with self._rec_lock:
+            data = self.installs()
+            rec = data.get(str(product_id))
+            if not rec or str(rec.get("build_id") or "") != str(expect_build or ""):
+                return False
+            if expect_version is not None and rec.get("version", "") != expect_version:
+                return False
+            rec.update(fields)
+            self.db.kv_set(INSTALLS_KEY, data)
+            return True
+
+    @staticmethod
+    def _version_source(rec: dict) -> tuple[str, bool]:
+        """(installed version, read from the Linux ``gameinfo`` file). goggame info files store their own
+        format version (an int) in "version", so only non-empty strings count as a game version."""
+        v = rec.get("version")
+        if isinstance(v, str) and v.strip():
+            return v.strip(), False
+        if rec.get("platform") == "linux" and rec.get("install_path"):
+            # GOG's Linux installers write <install>/gameinfo: title, version, ... (one per line)
+            try:
+                lines = (Path(rec["install_path"]) / "gameinfo").read_text(errors="replace").splitlines()
+            except OSError:
+                lines = []
+            if len(lines) > 1 and lines[1].strip():
+                return lines[1].strip(), True
+        return "", False
+
+    def _installed_version(self, rec: dict) -> str:
+        return self._version_source(rec)[0]
 
     def _apply_record(self, game: Game, rec: dict | None) -> None:
         if rec and Path(rec.get("install_path", "")).is_dir():
             game.installed = True
             game.install_path = rec["install_path"]
             game.platform = rec.get("platform", "windows")
-            game.version = rec.get("version", "")
+            game.version = self._installed_version(rec)
             game.build_id = str(rec.get("build_id", ""))
             game.install_size = int(rec.get("size", 0))
             game.extra["install_method"] = rec.get("method", "")
@@ -253,24 +312,17 @@ class GogIntegration(Integration):
         for g in games:
             if not g.installed:
                 continue
-            cfg = self.db.get_config(g.uid)
-            if cfg.get("pin_version"):
-                g.update_available = False
-                continue
-            rec = self.install_record(g.source_id) or {}
             try:
-                if rec.get("method") in ("gen2", "imported-gen2"):
-                    builds = content.Gen2(self.api, g.source_id).builds(rec.get("platform", "windows"))
-                    latest = content.Gen2(self.api, g.source_id).pick(builds, branch=rec.get("branch"))
-                    g.update_available = bool(latest and str(latest.get("build_id")) != str(rec.get("build_id")))
-                else:
-                    product = self.api.product(g.source_id, expand=("downloads",))
-                    inst = offline.pick_installer(offline.installers_for(product, rec.get("platform", "linux")),
-                                                  rec.get("language", "en"))
-                    g.update_available = bool(inst and rec.get("version") and inst.get("version") != rec.get("version"))
+                info = self.version_info(g, refresh=True)
             except Exception as exc:  # noqa: BLE001
                 log.debug("update check failed for %s: %s", g.title, exc)
                 continue
+            if info is None or info.error:
+                continue  # keep the previous flag: a failed check says nothing about updates
+            # the check may have healed the record's version (imports)
+            g.version = self._installed_version(self.install_record(g.source_id) or {}) or g.version
+            pinned = bool(self.db.get_config(g.uid).get("pin_version"))  # may have changed during the fetch
+            g.update_available = info.update_available and not pinned  # pinned games are still checked
             if g.update_available:
                 out.append(g.uid)
         return out
@@ -278,8 +330,7 @@ class GogIntegration(Integration):
     # ------------------------------------------------------------- import
     def _import_heroic(self) -> None:
         """Pick up GOG games previously installed with Heroic Games Launcher."""
-        records = self.installs()
-        changed = False
+        found: dict[str, dict] = {}
         for cfg_root in (Path.home() / ".config/heroic", Path.home() / ".var/app/com.heroicgameslauncher.hgl/config/heroic"):
             f = cfg_root / "gog_store" / "installed.json"
             try:
@@ -289,9 +340,9 @@ class GogIntegration(Integration):
             for item in data.get("installed", []):
                 pid = str(item.get("appName", ""))
                 path = item.get("install_path", "")
-                if not pid or pid in records or not Path(path).is_dir():
+                if not pid or pid in found or not Path(path).is_dir():
                     continue
-                records[pid] = {
+                found[pid] = {
                     "install_path": path,
                     "platform": item.get("platform", "windows"),
                     "version": item.get("version", ""),
@@ -302,9 +353,16 @@ class GogIntegration(Integration):
                     "size": 0,
                     "source": "heroic",
                 }
-                changed = True
-        if changed:
-            self.db.kv_set(INSTALLS_KEY, records)
+                if "branch" in item:  # otherwise the channel of the matched build is adopted on the first check
+                    found[pid]["branch"] = item["branch"] or None
+        if not found:
+            return
+        with self._rec_lock:
+            records = self.installs()
+            new = {k: v for k, v in found.items() if k not in records}
+            if new:
+                records.update(new)
+                self.db.kv_set(INSTALLS_KEY, records)
 
     def import_path(self, path: str) -> list[Game]:
         """Scan a folder for already-installed GOG games (Galaxy's "Scan and import folders")."""
@@ -325,10 +383,13 @@ class GogIntegration(Integration):
                 # native Linux installs keep the info file in <install>/game/ next to <install>/start.sh
                 is_linux = info.parent.name.lower() == "game" and (info.parent.parent / "start.sh").exists()
                 install_dir = info.parent.parent if is_linux else info.parent
+                # goggame "version" is the info file's format version (1), not the game's: the game version
+                # comes from the matched build (Windows) or <install>/gameinfo (Linux). No "branch" key, so
+                # the first version check adopts the channel of the matched build.
                 found[pid] = {
                     "install_path": str(install_dir),
                     "platform": "linux" if is_linux else "windows",
-                    "version": data.get("version", ""),
+                    "version": "",
                     "build_id": str(data.get("buildId", "")),
                     "language": (data.get("language") or "English"),
                     "dlcs": [],
@@ -338,9 +399,10 @@ class GogIntegration(Integration):
                 }
         if not found:
             return []
-        records = self.installs()
-        records.update({k: v for k, v in found.items() if k not in records})
-        self.db.kv_set(INSTALLS_KEY, records)
+        with self._rec_lock:
+            records = self.installs()
+            records.update({k: v for k, v in found.items() if k not in records})
+            self.db.kv_set(INSTALLS_KEY, records)
         out = []
         existing = {g.source_id: g for g in self.services.library.games_for_source(self.id)}
         for pid, rec in found.items():
@@ -476,7 +538,11 @@ class GogIntegration(Integration):
     def install_options(self, game: Game, platform: str = "") -> InstallOptions:
         product = self.api.product(game.source_id, expand=("downloads", "expanded_dlcs"))
         owned = self.owned_ids()
-        win_builds = content.Gen2(self.api, game.source_id).builds("windows")
+        try:
+            _, win_builds, _ = self._builds(game.source_id, "windows")
+            builds_error = None
+        except (ApiError, OSError) as exc:  # only matters if the Windows version is installed
+            win_builds, builds_error = [], exc
         platforms = []
         if offline.installers_for(product, "linux"):
             platforms.append("linux")
@@ -489,11 +555,14 @@ class GogIntegration(Integration):
         else:
             platforms.sort(key=lambda p: 0 if p == "windows" else 1)
         platform = platform if platform in platforms else platforms[0]
+        if platform == "windows" and builds_error is not None:
+            raise RuntimeError(f"Couldn't get the build list from GOG: {builds_error}") from builds_error
         lang = self.settings.get("general.language") or "en-US"
         opts = InstallOptions(platforms=platforms, platform=platform)
         title_dir = sanitize_dirname(game.title)
         if platform == "windows" and win_builds:
-            info = content.Gen2(self.api, game.source_id).build_info(win_builds[0])
+            newest = content.Gen2.latest(win_builds, None) or win_builds[0]  # a newer beta is never the default
+            info = content.Gen2(self.api, game.source_id).build_info(newest)
             opts.method = "GOG Galaxy content system (Proton)"
             langs = info.languages() or ["en-US"]
             opts.languages = [(c, content.lang_label(c)) for c in langs]
@@ -501,10 +570,15 @@ class GogIntegration(Integration):
             opts.dlcs = [{"id": p["id"], "title": p["name"], "size": info.dlc_size(p["id"], opts.language)}
                          for p in info.dlc_products() if p["id"] in owned]
             opts.download_size, opts.disk_size = info.sizes(opts.language, [d["id"] for d in opts.dlcs])
-            opts.versions = [{"id": str(b["build_id"]), "label": b.get("version_name") or str(b["build_id"]),
-                              "date": (b.get("date_published") or "")[:10], "branch": b.get("branch")}
-                             for b in win_builds]
-            opts.version = opts.versions[0]["id"] if opts.versions else ""
+            # Stable builds first (newest first), then the beta channels' builds
+            ordered = [b for b in win_builds if not b.get("branch")] + [b for b in win_builds if b.get("branch")]
+            opts.versions = [{"id": str(b["build_id"]),
+                              "label": (b.get("version_name") or f"Build {b['build_id']}")
+                              + (" (newest)" if b is newest else ""),
+                              "date": (b.get("date_published") or "")[:10],
+                              "branch": content.branch_label(b["branch"]) if b.get("branch") else ""}
+                             for b in ordered]
+            opts.latest = opts.version = str(newest["build_id"])
             title_dir = sanitize_dirname(info.install_directory or game.title)
             if info.dependencies and self.settings.get("downloads.install_dependencies"):
                 opts.notes.append("Required redistributables (" + ", ".join(info.dependencies[:4]) +
@@ -534,15 +608,27 @@ class GogIntegration(Integration):
     def install(self, game: Game, request: InstallRequest, ctx: JobContext) -> Game:
         platform = request.platform or self.default_platform(game)
         base_dir = Path(request.base_dir or self.settings.get("library.install_dir"))
-        if platform == "windows" and content.Gen2(self.api, game.source_id).builds("windows"):
-            return self._gen2(game, ctx, "install", base_dir=base_dir, language=request.language,
-                              dlcs=request.dlcs, build_id=request.version)
+        if platform == "windows":
+            try:
+                _, builds, _ = self._builds(game.source_id, "windows")
+            except (ApiError, OSError) as exc:
+                # don't quietly fall back to the offline installer just because GOG could not be reached
+                raise RuntimeError(f"Couldn't get the build list from GOG: {exc}") from exc
+            if builds:
+                return self._gen2(game, ctx, "install", base_dir=base_dir, language=request.language,
+                                  dlcs=request.dlcs, build_id=request.version)
         return self._offline(game, ctx, platform, base_dir=base_dir, language=request.language, dlcs=request.dlcs)
 
     def update(self, game: Game, ctx: JobContext, version: str = "") -> Game:
         rec = self.install_record(game.source_id) or {}
-        if rec.get("method", "").endswith("gen2") or rec.get("method") == "gen2":
+        if rec.get("method", "") in ("gen2", "imported-gen2"):
+            if version.startswith(base.BRANCH_TARGET):
+                return self._gen2(game, ctx, "update", to_branch=version[len(base.BRANCH_TARGET):] or None,
+                                  switch_branch=True)
             return self._gen2(game, ctx, "update", build_id=version)
+        if version:
+            raise base.NotSupported("GOG only offers its newest installer for this copy, so it can only be updated "
+                                    "to the newest version.")
         return self._offline(game, ctx, rec.get("platform", "linux"), language=rec.get("language", ""),
                              dlcs=rec.get("dlcs", []), existing=Path(game.install_path))
 
@@ -555,38 +641,49 @@ class GogIntegration(Integration):
 
     def install_dlcs(self, game: Game, dlc_ids: list[str], ctx: JobContext) -> Game:
         rec = self.install_record(game.source_id) or {}
-        dlcs = sorted(set(rec.get("dlcs", [])) | set(dlc_ids))
+        dlcs = sorted(set(rec.get("dlcs_wanted", [])) | set(rec.get("dlcs", [])) | set(dlc_ids))
         if rec.get("method", "").endswith("gen2"):
             return self._gen2(game, ctx, "update", build_id=str(rec.get("build_id", "")), dlcs=dlcs, same_build=True)
         return self._offline(game, ctx, rec.get("platform", "linux"), language=rec.get("language", ""),
                              dlcs=dlc_ids, existing=Path(game.install_path), dlc_only=True, all_dlcs=dlcs)
 
-    def versions(self, game: Game) -> list[dict]:
-        rec = self.install_record(game.source_id) or {}
-        os_name = rec.get("platform") or "windows"
-        if os_name != "windows":
-            return []
-        builds = content.Gen2(self.api, game.source_id).builds(os_name)
-        return [{"id": str(b["build_id"]), "label": b.get("version_name") or str(b["build_id"]),
-                 "date": (b.get("date_published") or "")[:10], "branch": b.get("branch") or "",
-                 "current": str(b["build_id"]) == str(rec.get("build_id"))} for b in builds]
-
     def _gen2(self, game: Game, ctx: JobContext, mode: str, base_dir: Path | None = None, language: str = "",
-              dlcs: list | None = None, build_id: str = "", same_build: bool = False) -> Game:
+              dlcs: list | None = None, build_id: str = "", same_build: bool = False, to_branch: str | None = None,
+              switch_branch: bool = False) -> Game:
+        """Install / update / repair from Galaxy builds. Updates stay on the recorded channel unless an explicit
+        build (``build_id``) or channel (``switch_branch`` + ``to_branch``) is asked for."""
         rec = self.install_record(game.source_id) or {}
         gen2 = content.Gen2(self.api, game.source_id)
         ctx.stage("Fetching build information")
-        builds = gen2.builds("windows")
+        # always a fresh list (this also refreshes what the game page shows)
+        _, builds, _ = self._builds(game.source_id, "windows", fetch=True, refresh=True)
         if not builds:
-            raise RuntimeError("No Galaxy builds available for this game")
-        build = gen2.pick(builds, build_id=build_id, branch=rec.get("branch"))
-        if build is None:
-            raise RuntimeError(f"Build {build_id} is no longer available")
+            raise RuntimeError("GOG has no Galaxy builds for this game")
+        if "branch" in rec:
+            rec_branch = rec["branch"] or None
+        else:  # imports: the channel of the installed build
+            rec_branch = (gen2.find(builds, str(rec.get("build_id") or "")) or {}).get("branch") or None
+        if build_id:
+            build = gen2.find(builds, build_id)
+            if build is None:
+                raise RuntimeError(f"Build {build_id} is no longer available from GOG")
+        elif switch_branch:
+            build = gen2.latest(builds, to_branch)
+            if build is None:
+                raise RuntimeError(f"GOG has no builds on the {content.branch_label(to_branch)} channel")
+        elif mode == "install":
+            build = gen2.pick(builds) or builds[0]  # a game that only has beta builds still installs
+        else:
+            build = gen2.pick(builds, branch=rec_branch)
+            if build is None:
+                raise RuntimeError(f"GOG has no builds on the {content.branch_label(rec_branch)} channel any more")
         info = gen2.build_info(build)
         language = language or rec.get("language") or self.settings.get("general.language") or "en-US"
         owned = self.owned_ids()
         product_ids = {p["id"] for p in info.dlc_products()}
-        dlc_list = [d for d in (dlcs if dlcs is not None else rec.get("dlcs", [])) if d in product_ids and d in owned]
+        # DLCs the user asked for are remembered, so a rollback to a build without them doesn't lose the choice
+        wanted = list(dlcs) if dlcs is not None else list(rec.get("dlcs_wanted", rec.get("dlcs", [])))
+        dlc_list = [d for d in wanted if d in product_ids and d in owned]
         if mode == "install":
             install_dir = Path(base_dir) / sanitize_dirname(info.install_directory or game.title)
         else:
@@ -596,7 +693,7 @@ class GogIntegration(Integration):
         old_record = content.load_manifest(game.source_id)
         if old_record is None and mode != "install" and rec.get("build_id"):
             # imported install: rebuild the manifest from the installed build
-            old_build = gen2.pick(builds, build_id=str(rec.get("build_id")))
+            old_build = gen2.find(builds, str(rec.get("build_id")))
             if old_build:
                 old_info = gen2.build_info(old_build)
                 old_fs = gen2.file_set(old_info, language, dlc_list, ctx=ctx)
@@ -641,19 +738,32 @@ class GogIntegration(Integration):
             info, fs, "windows", language, dlc_list, str(install_dir), redists))
         resume_path.unlink(missing_ok=True)
         size = sum(f.size for f in fs.files)
+        changed = mode in ("install", "update") and not same_build  # a different build is now installed
+        newest = gen2.latest(builds, info.branch) or build
+        newer = sum(1 for b in builds if (b.get("branch") or None) == (info.branch or None)
+                    and (b.get("date_published") or "") > info.date)
+        status = "up_to_date" if str(newest.get("build_id")) == info.build_id else "behind"
         new_rec = {
             "install_path": str(install_dir), "platform": "windows", "version": info.version,
             "build_id": info.build_id, "branch": info.branch, "language": language, "dlcs": dlc_list,
-            "method": "gen2", "size": size, "redists": redists, "title": game.title,
+            "dlcs_wanted": sorted(set(wanted)), "method": "gen2", "size": size, "redists": redists,
+            "title": game.title, "date": (info.date or "")[:10],
             "installed_at": rec.get("installed_at") or time.time(),
+            "updated_at": time.time() if changed
+            else (rec.get("updated_at") or rec.get("installed_at") or time.time()),
+            "latest": self._summary(self._build_ref(newest, newest=True), info.build_id, status, status == "behind",
+                                    newer),
         }
         self._set_record(game.source_id, new_rec)
-        if build_id and mode == "update" and not same_build:
-            latest = gen2.pick(builds, branch=info.branch)
-            if latest and str(latest.get("build_id")) != info.build_id:
-                self.db.update_config(game.uid, pin_version=True)  # rolled back: stop auto-updating
+        if changed:
+            # pin rule: an explicitly chosen build that isn't the newest on its channel stops update offers;
+            # anything else (plain update, newest build, channel switch) lifts the pin
+            pin = bool(build_id) and str(newest.get("build_id")) != info.build_id
+            if bool(self.db.get_config(game.uid).get("pin_version")) != pin:
+                self.db.update_config(game.uid, pin_version=pin)
         self._apply_record(game, new_rec)
-        game.update_available = False
+        # a repair or DLC install keeps the build, so an outstanding update stays outstanding
+        game.update_available = status == "behind" and not self.db.get_config(game.uid).get("pin_version")
         return game
 
     def _offline(self, game: Game, ctx: JobContext, platform: str, base_dir: Path | None = None,
@@ -692,17 +802,28 @@ class GogIntegration(Integration):
                     f.unlink(missing_ok=True)
         ctx.stage("Finishing")
         rec = self.install_record(game.source_id) or {}
+        version = str(inst.get("version") or "")
         new_rec = {
             "install_path": str(install_dir), "platform": platform,
-            "version": inst.get("version", "") if not dlc_only else rec.get("version", ""),
+            "version": version if not dlc_only else rec.get("version", ""),
             "build_id": "", "language": inst.get("language", "en"),
             "dlcs": sorted(set(all_dlcs or []) | set(dlcs or [])), "method": "installer",
             "size": dir_size(install_dir), "title": game.title,
             "installed_at": rec.get("installed_at") or time.time(),
+            "updated_at": (rec.get("updated_at") or rec.get("installed_at") or time.time()) if dlc_only
+            else time.time(),
+            # a DLC-only run doesn't change the base game, so its summary stays valid
+            "latest": rec.get("latest") if dlc_only else self._summary(
+                base.BuildRef(version=version, size=int(inst.get("total_size") or 0), newest=True), version,
+                "up_to_date", False),
         }
         self._set_record(game.source_id, new_rec)
+        if not dlc_only and self.db.get_config(game.uid).get("pin_version"):
+            self.db.update_config(game.uid, pin_version=False)  # the newest installer is never a pinned choice
+        self.invalidate_versions(game.source_id)  # the cached installer list may predate this install
         self._apply_record(game, new_rec)
-        game.update_available = False
+        if not dlc_only:
+            game.update_available = False
         return game
 
     def uninstall(self, game: Game, ctx: JobContext) -> Game:
@@ -717,8 +838,263 @@ class GogIntegration(Integration):
             safe_rmtree(path)
         content.delete_manifest(game.source_id)
         self._set_record(game.source_id, None)
+        self.invalidate_versions(game.source_id)
+        if self.db.get_config(game.uid).get("pin_version"):
+            self.db.update_config(game.uid, pin_version=False)
         self._apply_record(game, None)
         return game
+
+    # ------------------------------------------------------------ versions
+    def versions(self, game: Game) -> list[dict]:
+        """The Galaxy builds this copy can change to (a thin wrapper around ``version_info``)."""
+        info = self.version_info(game)
+        if not info or info.kind != "builds":
+            return []
+        if info.error:
+            raise RuntimeError(info.error_text)
+        return [{"id": b.id, "label": b.label, "date": b.date, "branch": b.branch, "current": b.current,
+                 "newest": b.newest} for b in info.builds]
+
+    def _cached(self, key: tuple, loader, fetch: bool, refresh: bool):
+        """-> (wall time, items, expired) or None. ``fetch=False`` never calls ``loader`` (any memory hit is
+        returned, however old). Concurrent fetches of one key share a single request; errors are not cached."""
+        hit = self._vcache.get(key)
+        now = time.monotonic()
+        if hit and not refresh and now - hit[0] < VERSIONS_TTL:
+            return hit[1], list(hit[2]), False
+        if not fetch:
+            return (hit[1], list(hit[2]), True) if hit else None
+        with self._vmeta:
+            lock = self._vlocks.setdefault(key, threading.Lock())
+        with lock:
+            hit = self._vcache.get(key)
+            if hit and hit[0] >= now:  # another thread fetched it while this one waited
+                return hit[1], list(hit[2]), False
+            items = loader()
+            entry = (time.monotonic(), time.time(), list(items))
+            self._vcache[key] = entry
+            return entry[1], list(items), False
+
+    def _builds(self, product_id: str, os_name: str = "windows", fetch: bool = True, refresh: bool = False):
+        pid = str(product_id)
+        return self._cached(("builds", pid, os_name), lambda: content.Gen2(self.api, pid).builds(os_name),
+                            fetch, refresh)
+
+    def _installers(self, product_id: str, fetch: bool = True, refresh: bool = False):
+        pid = str(product_id)
+
+        def load():
+            return (self.api.product(pid, expand=("downloads",)).get("downloads") or {}).get("installers") or []
+        return self._cached(("installers", pid), load, fetch, refresh)
+
+    def invalidate_versions(self, product_id: str | None = None) -> None:
+        """Forget cached build / installer lists (of one product, or all of them)."""
+        for key in list(self._vcache):
+            if product_id is None or key[1] == str(product_id):
+                self._vcache.pop(key, None)
+
+    @staticmethod
+    def _version_kind(rec: dict) -> str:
+        platform = rec.get("platform", "windows")
+        if rec.get("method") in ("gen2", "imported-gen2") and platform == "windows":
+            return "builds"
+        return "installer" if platform in ("linux", "windows") else "none"
+
+    @staticmethod
+    def _origin(rec: dict) -> str:
+        if rec.get("source") == "heroic":
+            return "heroic"
+        return "folder" if str(rec.get("method", "")).startswith("imported") else "nebula"
+
+    @staticmethod
+    def _method_text(kind: str, origin: str, platform: str) -> str:
+        runs = {"linux": "Linux native", "windows": "Windows version (runs with Proton)"}.get(
+            platform, f"{(platform or 'unknown').capitalize()} version")
+        if kind == "builds":
+            return {"heroic": "GOG Galaxy builds · imported from Heroic",
+                    "folder": "GOG Galaxy builds · imported from a folder"}.get(origin, f"GOG Galaxy builds · {runs}")
+        if origin == "heroic":
+            return f"Imported from Heroic · {runs}"
+        if origin == "folder":
+            return f"Imported folder · {runs}"
+        return f"GOG offline installer · {runs}"
+
+    @staticmethod
+    def _build_ref(b: dict, **kw) -> base.BuildRef:
+        published = str(b.get("date_published") or "")
+        return base.BuildRef(id=str(b.get("build_id") or ""), version=str(b.get("version_name") or ""),
+                             branch=b.get("branch") or "", date=published[:10], published=published, **kw)
+
+    @staticmethod
+    def _summary(latest: base.BuildRef, identity: str, status: str, update_available: bool, newer_count: int = 0,
+                 branch_gone: bool = False, checked_at: float = 0.0) -> dict:
+        """The "newest version" summary kept in the install record, shown until the next live check.
+        ``identity`` is the installed build id (or installer version) the status was computed for."""
+        return {"id": latest.id, "version": latest.version, "branch": latest.branch, "date": latest.date,
+                "size": latest.size, "checked_at": checked_at or time.time(), "for": identity, "status": status,
+                "update_available": update_available, "newer_count": newer_count, "branch_gone": branch_gone}
+
+    def version_info(self, game: Game, fetch: bool = True, refresh: bool = False) -> base.VersionInfo | None:
+        if not game.installed:
+            return None
+        pid = game.source_id
+        rec = self.install_record(pid)
+        if not rec:
+            return None
+        cfg = self.db.get_config(game.uid)
+        kind, origin, platform = self._version_kind(rec), self._origin(rec), rec.get("platform", "windows")
+        version, from_gameinfo = self._version_source(rec)
+        info = base.VersionInfo(
+            kind=kind, method=self._method_text(kind, origin, platform), origin=origin, platform=platform,
+            pinned=bool(cfg.get("pin_version")), auto_update=cfg.get("auto_update", True) is not False,
+            updated_at=float(rec.get("updated_at") or rec.get("installed_at") or 0),
+            installed=base.BuildRef(id=str(rec.get("build_id") or ""), version=version,
+                                    branch=rec.get("branch") or "", date=str(rec.get("date") or "")[:10],
+                                    current=True))
+        if kind == "none":
+            return info
+        if kind == "installer":
+            info.note = INSTALLER_NOTES[platform]  # what can't be done with an offline-installer copy
+        match, live = None, False
+        if not self.connected():
+            info.error = "signed_out"
+            info.error_text = "Sign in to GOG to check for updates and change versions."
+        else:
+            try:
+                hit = (self._builds(pid, "windows", fetch, refresh) if kind == "builds"
+                       else self._installers(pid, fetch, refresh))
+                if hit is not None:  # None: nothing fetched yet and fetch=False -> the saved summary
+                    ts, items, expired = hit
+                    info.stale, info.checked_at = expired or not fetch, ts
+                    if kind == "builds":
+                        match = self._compare_builds(info, rec, items)
+                    else:
+                        self._compare_installer(info, rec, items, from_gameinfo)
+                    live = not info.error
+            except OSError as exc:  # requests' exceptions are OSErrors too
+                log.debug("version check for %s failed: %s", game.title, exc)
+                info.error, info.error_text = "offline", "Couldn't reach GOG. Check your connection and try again."
+            except ApiError as exc:
+                log.debug("version check for %s failed: %s", game.title, exc)
+                info.error, info.error_text = "failed", f"GOG returned an error ({exc})."
+            except Exception as exc:  # noqa: BLE001
+                log.info("version check for %s failed: %s", game.title, exc)
+                info.error, info.error_text = "failed", str(exc)
+        if not live:
+            self._apply_saved(info, rec.get("latest"))
+        elif not info.stale:
+            try:
+                self._save_summary(pid, rec, info, match)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("could not save the version summary for %s: %s", game.title, exc)
+        return info
+
+    def _compare_builds(self, info: base.VersionInfo, rec: dict, builds: list[dict]) -> dict | None:
+        """Fill ``info`` from GOG's build list; returns the installed build (None when GOG doesn't list it)."""
+        if not builds:
+            info.error, info.error_text = "failed", "GOG didn't return any builds for this game. Try again later."
+            return None
+        inst = info.installed
+        match = content.Gen2.find(builds, inst.id)
+        if match is not None:
+            inst.version = str(match.get("version_name") or "") or inst.version
+            inst.published = str(match.get("date_published") or "")
+            inst.date = inst.published[:10]
+            info.installed_listed = True
+            if "branch" not in rec:  # imports: adopt the channel of the matched build
+                inst.branch = match.get("branch") or ""
+        tracked = inst.branch
+        latest = content.Gen2.latest(builds, tracked)
+        if latest is None:  # the channel was closed: offer Stable (if any), never move automatically
+            info.branch_gone = True
+            latest = content.Gen2.latest(builds, None) if tracked else None
+        info.branch = "" if info.branch_gone else tracked
+        if info.branch_gone:
+            info.status = "channel_ended"
+        elif match is not None:
+            info.status = "up_to_date" if str(match.get("build_id")) == str(latest["build_id"]) else "behind"
+        else:
+            info.status = "unlisted"
+        if match is not None:
+            info.newer_count = sum(1 for b in builds if (b.get("branch") or "") == tracked
+                                   and str(b.get("date_published") or "") > inst.published)
+        # an unlisted build only means "update" for Nebula's own installs (imports may carry legacy ids)
+        info.update_available = info.status == "behind" or (info.status == "unlisted" and rec.get("method") == "gen2")
+        seen: set[str] = set()
+        for b in builds:
+            br = b.get("branch") or ""
+            info.builds.append(self._build_ref(b, newest=br not in seen, current=b is match))
+            seen.add(br)
+        info.branches = ["" if br is None else br for br in content.Gen2.branches(builds)]
+        info.latest = self._build_ref(latest, newest=True, current=latest is match) if latest else None
+        info.can_choose = info.can_update = True
+        return match
+
+    def _compare_installer(self, info: base.VersionInfo, rec: dict, items: list[dict], from_gameinfo: bool) -> None:
+        """Fill ``info`` from GOG's current offline installer for the installed platform."""
+        lang = rec.get("language") or self.settings.get("general.language") or "en"
+        inst = offline.pick_installer([i for i in items if i.get("os") == info.platform], lang)
+        if inst is None:
+            os_name = "Linux" if info.platform == "linux" else "Windows"
+            info.error = "failed"
+            info.error_text = f"GOG doesn't offer a {os_name} installer for this game any more."
+            return
+        info.latest = base.BuildRef(version=str(inst.get("version") or ""), size=int(inst.get("total_size") or 0),
+                                    newest=True)
+        have, newest = info.installed.version, info.latest.version
+        if not have or not newest:
+            info.status = "unknown"
+        elif from_gameinfo:  # gameinfo has no "(gog-N)" suffix, so compare without it
+            info.status = "up_to_date" if _norm_version(have) == _norm_version(newest) else "different"
+        else:  # exact: a "(gog-N)" bump is a new installer
+            info.status = "up_to_date" if have.strip() == newest.strip() else "different"
+        info.update_available = info.status == "different"
+        info.can_update, info.can_choose = True, False
+
+    @staticmethod
+    def _apply_saved(info: base.VersionInfo, saved) -> None:
+        """No live data (signed out, offline, nothing fetched yet): use the summary of the last check."""
+        info.stale = True
+        info.builds, info.branches, info.installed_listed = [], [], False
+        info.status, info.update_available, info.newer_count, info.branch_gone = "unknown", False, 0, False
+        info.can_update = not info.error
+        info.can_choose = not info.error and info.kind == "builds"
+        info.latest, info.checked_at = None, 0.0
+        if isinstance(saved, dict) and (saved.get("id") or saved.get("version")):
+            info.latest = base.BuildRef(id=str(saved.get("id") or ""), version=str(saved.get("version") or ""),
+                                        branch=saved.get("branch") or "", date=str(saved.get("date") or "")[:10],
+                                        size=int(saved.get("size") or 0), newest=True)
+            info.checked_at = float(saved.get("checked_at") or 0)
+            identity = info.installed.id if info.kind == "builds" else info.installed.version
+            if str(saved.get("for") or "").strip() == identity:
+                info.status = saved.get("status") or "unknown"
+                info.update_available = bool(saved.get("update_available"))
+                info.newer_count = int(saved.get("newer_count") or 0)
+                info.branch_gone = bool(saved.get("branch_gone"))
+            elif info.latest.id and info.latest.id == info.installed.id:
+                info.status = "up_to_date"
+        info.branch = "" if info.branch_gone else info.installed.branch
+
+    def _save_summary(self, pid: str, rec: dict, info: base.VersionInfo, match: dict | None) -> None:
+        """Persist a live check (the newest-version summary) and heal what imports recorded wrongly."""
+        identity = info.installed.id if info.kind == "builds" else info.installed.version
+        summary = self._summary(info.latest or base.BuildRef(), identity, info.status, info.update_available, info.newer_count,
+                                info.branch_gone, info.checked_at)
+        saved = rec.get("latest") if isinstance(rec.get("latest"), dict) else {}
+        patch = {}
+        if any(saved.get(k) != summary[k] for k in ("id", "version", "status", "for")) \
+                or time.time() - float(saved.get("checked_at") or 0) > SUMMARY_MAX_AGE:
+            patch["latest"] = summary
+        if match is not None:
+            name = str(match.get("version_name") or "")
+            if name and rec.get("version") != name:
+                patch["version"] = name
+            if not rec.get("date") and info.installed.date:
+                patch["date"] = info.installed.date
+            if "branch" not in rec:
+                patch["branch"] = match.get("branch") or None
+        if patch:  # the build id stays as recorded (it may be a legacy id that still matches)
+            self._patch_record(pid, info.installed.id, rec.get("version", ""), **patch)
 
     # ------------------------------------------------------------ details
     def details(self, game: Game) -> GameDetails:

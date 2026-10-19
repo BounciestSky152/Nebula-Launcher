@@ -82,10 +82,11 @@ class JobRow(QWidget):
 
     def update_progress(self) -> None:
         j = self.job
-        verb = VERBS.get(j.kind, j.kind.title())
+        verb = j.verb or VERBS.get(j.kind, j.kind.title())
         if j.state == "done":
-            self.stage.setText(f"{verb.replace('ing', 'ed').replace('Installed DLC', 'DLC installed')} • "
-                               f"{datetime.fromtimestamp(j.finished).strftime('%H:%M')}")
+            # verb_done comes ready-made ("Rolled back to 1.0"): the replace() would mangle labels like "Spring"
+            done = j.verb_done or verb.replace('ing', 'ed').replace('Installed DLC', 'DLC installed')
+            self.stage.setText(f"{done} • {datetime.fromtimestamp(j.finished).strftime('%H:%M')}")
             self.stage.setObjectName("Success")
         elif j.state == "failed":
             self.stage.setText(f"Failed: {j.error}")

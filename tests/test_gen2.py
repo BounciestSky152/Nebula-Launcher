@@ -243,6 +243,7 @@ def test_full_gog_integration_install_and_proton_launch(services, fake, server, 
     # update to a new build, then roll back to the old one (pins the version)
     fake.add_build("b2", "2.0", {"bin/game.exe": b"MZ2", "bin/editor.exe": b"MZ", "goggame-123.info": info},
                    date="2024-03-01")
+    monkeypatch.setattr(gog, "connected", lambda: True)  # version checks need a signed-in account
     assert gog.check_updates([result]) == ["gog:123"]
     updated = gog.update(result, make_ctx())
     assert updated.version == "2.0" and (tmp_path / "lib/Test Game/bin/game.exe").read_bytes() == b"MZ2"
@@ -256,3 +257,141 @@ def test_full_gog_integration_install_and_proton_launch(services, fake, server, 
     gog.uninstall(rolled, make_ctx())
     assert not (tmp_path / "lib" / "Test Game").exists()
     assert content.load_manifest("123") is None and gog.install_record("123") is None
+
+
+# ------------------------------------------------------------------ versions through GogIntegration
+def add_branch_build(fake, bid, ver, files, branch, date, public=True, **kw):
+    fake.add_build(bid, ver, files, date=date, **kw)
+    fake.builds_by_os["windows"][0]["branch"] = branch
+    fake.builds_by_os["windows"][0]["public"] = public
+
+
+def gog_for(services, fake, monkeypatch, owned=("123",)):
+    gog = services.integrations["gog"]
+    monkeypatch.setattr(gog.api, "builds", fake.builds)
+    monkeypatch.setattr(gog.api, "secure_link", fake.secure_link)
+    monkeypatch.setattr(gog, "owned_ids", lambda refresh=False: set(owned))
+    monkeypatch.setattr(gog, "connected", lambda: True)
+    services.settings.set("downloads.install_dependencies", False)
+    return gog
+
+
+def pinned(services) -> bool:
+    return bool(services.db.get_config("gog:123").get("pin_version"))
+
+
+def test_version_switch_flow(services, fake, monkeypatch, tmp_path):
+    from nebula.core.models import Game
+    from nebula.integrations import base
+    from nebula.integrations.base import InstallRequest
+
+    fake.add_build("b1", "1.0", {"game.bin": b"one"}, date="2024-01-01T10:00:00+0000")
+    fake.add_build("b2", "2.0", {"game.bin": b"two"}, date="2024-02-01T10:00:00+0000")
+    add_branch_build(fake, "b3", "2.1", {"game.bin": b"three"}, "public_beta", "2024-03-01T10:00:00+0000")
+    gog = gog_for(services, fake, monkeypatch)
+    game = gog.install(Game("gog", "123", "Test Game", os_support=["windows"]),
+                       InstallRequest(platform="windows", base_dir=str(tmp_path / "lib")), make_ctx())
+    exe = tmp_path / "lib" / "Test Game" / "game.bin"
+    assert game.build_id == "b2" and exe.read_bytes() == b"two", "a newer beta is never installed by default"
+    rec = gog.install_record("123")
+    installed_at = rec["installed_at"]
+    assert rec["branch"] is None and rec["latest"]["status"] == "up_to_date" and not pinned(services)
+
+    game = gog.update(game, make_ctx(), version="b1")  # roll back
+    rec = gog.install_record("123")
+    assert game.build_id == "b1" and exe.read_bytes() == b"one" and pinned(services)
+    assert rec["date"] == "2024-01-01" and rec["updated_at"] >= installed_at and rec["installed_at"] == installed_at
+    assert rec["latest"]["id"] == "b2" and rec["latest"]["status"] == "behind" and rec["latest"]["for"] == "b1"
+
+    game = gog.update(game, make_ctx())  # a plain update returns to the newest build and lifts the pin
+    assert game.build_id == "b2" and exe.read_bytes() == b"two" and not pinned(services)
+    game = gog.update(game, make_ctx(), version="b1")
+    game = gog.update(game, make_ctx(), version="b2")  # explicitly choosing the newest build lifts it too
+    assert game.build_id == "b2" and not pinned(services)
+
+    game = gog.update(game, make_ctx(), version=base.branch_target("public_beta"))
+    assert game.build_id == "b3" and exe.read_bytes() == b"three" and not pinned(services)
+    assert gog.install_record("123")["branch"] == "public_beta"
+    add_branch_build(fake, "b5", "2.2", {"game.bin": b"five"}, "public_beta", "2024-04-01T10:00:00+0000")
+    assert gog.check_updates([game]) == ["gog:123"]
+    game = gog.update(game, make_ctx())  # stays on the beta channel
+    assert game.build_id == "b5" and exe.read_bytes() == b"five"
+
+    game = gog.update(game, make_ctx(), version=base.branch_target(None))
+    assert game.build_id == "b2" and exe.read_bytes() == b"two" and gog.install_record("123")["branch"] is None
+    assert gog.check_updates([game]) == [] and not pinned(services)
+    with pytest.raises(RuntimeError, match="no longer available"):
+        gog.update(game, make_ctx(), version="b404")
+    with pytest.raises(RuntimeError, match="Next channel"):
+        gog.update(game, make_ctx(), version=base.branch_target("next"))
+
+
+def test_install_options_order_and_install_pin(services, fake, monkeypatch, tmp_path):
+    from nebula.core.models import Game
+    from nebula.integrations.base import InstallRequest
+
+    fake.add_build("b1", "1.0", {"game.bin": b"one"}, date="2024-01-01T10:00:00+0000")
+    fake.add_build("b2", "2.0", {"game.bin": b"two"}, date="2024-02-01T10:00:00+0000")
+    add_branch_build(fake, "b3", "2.1", {"game.bin": b"three"}, "public_beta", "2024-03-01T10:00:00+0000")
+    gog = gog_for(services, fake, monkeypatch)
+    monkeypatch.setattr(gog.api, "product", lambda *a, **k: {"downloads": {"installers": []}, "expanded_dlcs": []})
+    game = Game("gog", "123", "Test Game", os_support=["windows"])
+    opts = gog.install_options(game, "windows")
+    assert [v["id"] for v in opts.versions] == ["b2", "b1", "b3"]
+    assert opts.latest == opts.version == "b2" and opts.versions[0]["label"] == "2.0 (newest)"
+    assert opts.versions[1]["branch"] == "" and opts.versions[2]["branch"] == "Public beta"
+    game = gog.install(game, InstallRequest(platform="windows", base_dir=str(tmp_path / "lib"), version="b1"),
+                       make_ctx())
+    assert game.build_id == "b1" and pinned(services), "installing an older build pins it"
+    gog.uninstall(game, make_ctx())
+    assert not pinned(services) and gog.install_record("123") is None
+
+
+def test_rollback_keeps_wanted_dlcs(services, fake, server, monkeypatch, tmp_path):
+    from nebula.core.models import Game
+    from nebula.integrations.base import InstallRequest
+
+    def dlc_chunk(req):  # DLC chunks are fetched through the DLC's own secure link
+        path = req.path.replace("/store/999/token=abc", "/store/123")
+        return (200, {}, server.files[path]) if path in server.files else (404, {}, b"")
+
+    server.handlers[("GET", "/store/999/token=abc/")] = dlc_chunk
+    monkeypatch.setattr(content.time, "sleep", lambda s: None)
+    fake.add_build("b1", "1.0", {"game.bin": b"one"}, date="2024-01-01")
+    fake.add_build("b2", "2.0", {"game.bin": b"two"}, date="2024-02-01", dlc_files={"dlc/extra.pak": b"dlc data"})
+    gog = gog_for(services, fake, monkeypatch, owned=("123", "999"))
+    game = gog.install(Game("gog", "123", "Test Game", os_support=["windows"]),
+                       InstallRequest(platform="windows", base_dir=str(tmp_path / "lib"), dlcs=["999"]), make_ctx())
+    pak = tmp_path / "lib" / "Test Game" / "dlc" / "extra.pak"
+    assert pak.read_bytes() == b"dlc data" and gog.install_record("123")["dlcs"] == ["999"]
+    game = gog.update(game, make_ctx(), version="b1")  # b1 has no DLC
+    rec = gog.install_record("123")
+    assert rec["dlcs"] == [] and rec["dlcs_wanted"] == ["999"] and not pak.exists()
+    game = gog.update(game, make_ctx())
+    rec = gog.install_record("123")
+    assert pak.read_bytes() == b"dlc data" and rec["dlcs"] == ["999"] and game.extra["installed_dlcs"] == ["999"]
+
+
+def test_install_no_offline_fallback_on_network_error(services, fake, monkeypatch, tmp_path):
+    import requests
+
+    from nebula.core.models import Game
+    from nebula.integrations.base import InstallRequest
+    from nebula.integrations.gog import offline
+
+    gog = gog_for(services, fake, monkeypatch)
+
+    def down(*_a, **_k):
+        raise requests.ConnectionError("network is unreachable")
+
+    monkeypatch.setattr(gog.api, "builds", down)
+    monkeypatch.setattr(offline, "download_installer",
+                        lambda *a, **k: pytest.fail("must not fall back to the offline installer"))
+    game = Game("gog", "123", "Test Game", os_support=["windows"])
+    request = InstallRequest(platform="windows", base_dir=str(tmp_path / "lib"))
+    with pytest.raises(RuntimeError, match="Couldn't get the build list"):
+        gog.install(game, request, make_ctx())
+    # "no builds" (an HTTP 4xx, or an empty list) still uses the offline installer
+    monkeypatch.setattr(gog.api, "builds", lambda *a, **k: [])
+    monkeypatch.setattr(gog, "_offline", lambda *a, **k: "offline")
+    assert gog.install(game, request, make_ctx()) == "offline"

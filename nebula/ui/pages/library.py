@@ -110,7 +110,7 @@ class LibraryPage(Page):
         for v in (self.grid, self.table):
             v.open_entry.connect(lambda k: self.win.navigate("game", k))
             v.context_entry.connect(lambda k, pos: ctl.entry_menu(k).exec(pos))
-        self.grid.play_entry.connect(ctl.primary_action)
+        self.grid.play_entry.connect(lambda k: ctl.primary_action(k, update=False))  # the cover shows a play icon
         self.table.sort_requested.connect(self._header_sort)
         self._view = self.s.settings.get("library.view") or "grid"
         self._pending = False

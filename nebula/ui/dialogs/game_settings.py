@@ -235,7 +235,7 @@ class GameSettingsDialog(QDialog):
             lay.addWidget(label(f"{integ.name} manages saves for this game itself.", "Faint"))
         self.auto_update = QCheckBox("Update automatically")
         self.auto_update.setChecked(self.cfg.get("auto_update", True) is not False)
-        self.pin = QCheckBox("Keep the current version (don't offer updates)")
+        self.pin = QCheckBox("Stay on this version (don't offer updates)")
         self.pin.setChecked(bool(self.cfg.get("pin_version")))
         if integ.supports("update"):
             lay.addSpacing(10)
@@ -337,22 +337,28 @@ class GameSettingsDialog(QDialog):
                         on_error=lambda e: self.preview.setPlainText(f"Cannot build the command:\n{e}"))
 
     def _collect(self) -> dict:
+        """The dialog's values over the config it opened with; unchanged values keep the stored ones."""
         cfg = dict(self.cfg)
+
+        def put(key: str, value, default=None) -> None:
+            if value != self.cfg.get(key, default):
+                cfg[key] = value
+
         if not self.delegated:
-            cfg["runner"] = self.runner.currentData() or ""
-            cfg["proton"] = self.proton.currentData() or ""
-            cfg["wine"] = self.wine.currentData() or ""
-            cfg["prefix"] = self.prefix.text().strip()
-            cfg["args"] = self.args.text().strip()
-            cfg["exe_override"] = self.exe.text().strip()
-            cfg["wrapper"] = self.wrapper.text().strip()
+            put("runner", self.runner.currentData() or "", "")
+            put("proton", self.proton.currentData() or "", "")
+            put("wine", self.wine.currentData() or "", "")
+            put("prefix", self.prefix.text().strip(), "")
+            put("args", self.args.text().strip(), "")
+            put("exe_override", self.exe.text().strip(), "")
+            put("wrapper", self.wrapper.text().strip(), "")
             env = {}
             for r in range(self.env.rowCount()):
                 k = (self.env.item(r, 0).text() if self.env.item(r, 0) else "").strip()
                 v = self.env.item(r, 1).text() if self.env.item(r, 1) else ""
                 if k:
                     env[k] = v
-            cfg["env"] = env
+            put("env", env, {})
             for key, combo in (("gamemode", self.t_gamemode), ("mangohud", self.t_mangohud),
                                ("gamescope", self.t_gamescope), ("dxvk_hud", self.t_dxvk), ("esync", self.t_esync),
                                ("fsync", self.t_fsync), ("wayland", self.t_wayland), ("nvapi", self.t_nvapi)):
@@ -360,20 +366,35 @@ class GameSettingsDialog(QDialog):
                 if val is None:
                     cfg.pop(key, None)
                 else:
-                    cfg[key] = val
-            cfg["gamescope_args"] = self.gs_args.text().strip()
-            cfg["fps_limit"] = self.fps.value() or None
+                    put(key, val)
+            put("gamescope_args", self.gs_args.text().strip(), "")
+            put("fps_limit", self.fps.value() or None)
             if hasattr(self, "via_heroic"):
-                cfg["epic_via_heroic"] = self.via_heroic.isChecked()
-        cfg["cloud_saves"] = self.cloud.isChecked()
-        cfg["auto_update"] = self.auto_update.isChecked()
-        cfg["pin_version"] = self.pin.isChecked()
+                put("epic_via_heroic", self.via_heroic.isChecked(), False)
+        put("cloud_saves", self.cloud.isChecked(), True)
+        if self.s.integration(self.game.source).supports("update"):
+            put("auto_update", self.auto_update.isChecked(), True)
+            put("pin_version", self.pin.isChecked(), False)
         return cfg
 
     def _save(self, close: bool = True) -> None:
-        cfg = self._collect()
-        self.s.db.set_config(self.game.uid, cfg)
-        self.cfg = cfg
+        # 3-way merge: only what was edited here overrides the stored config, so values written while the
+        # dialog was open (a pin set by a rollback job, redists_done, ...) survive
+        uid = self.game.uid
+        integ = self.s.integration(self.game.source)
+        edited, snap = self._collect(), self.cfg
+        with self.s.db.lock:  # jobs write configs from other threads
+            fresh = self.s.db.get_config(uid)
+            merged = dict(fresh)
+            for k in set(snap) | set(edited):
+                if (k in edited, edited.get(k)) != (k in snap, snap.get(k)):
+                    if k in edited:
+                        merged[k] = edited[k]
+                    else:
+                        merged.pop(k, None)
+            self.s.db.set_config(uid, merged)
+        self.cfg = merged
+        if integ.supports("update") and bool(merged.get("pin_version")) != bool(fresh.get("pin_version")):
+            self.s.actions.set_version_pin(self.game, bool(merged.get("pin_version")))
         if close:
             self.accept()
-

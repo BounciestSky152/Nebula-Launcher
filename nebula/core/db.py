@@ -204,6 +204,11 @@ class Database:
     def set_config(self, uid: str, data: dict) -> None:
         self._exec("INSERT OR REPLACE INTO game_config(uid, data) VALUES (?,?)", (uid, json.dumps(data)))
 
+    @property
+    def lock(self) -> threading.RLock:
+        """Hold it for a read-modify-write spanning several calls (other threads write configs too)."""
+        return self._lock
+
     def update_config(self, uid: str, **changes) -> dict:
         with self._lock:
             cfg = self.get_config(uid)

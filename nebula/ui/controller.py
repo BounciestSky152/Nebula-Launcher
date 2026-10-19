@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QMenu, QMessageBox
 
 from nebula.core import tasks
+from nebula.core.actions import HANDOFF_SOURCES
 from nebula.core.utils import xdg_open
 from nebula.integrations import base
 from nebula.runners.compat import RunnerMissing
@@ -42,14 +43,28 @@ class UiController:
             return primary
         return next((g for g in entry.games if g.installed), None)
 
+    def update_target(self, entry):
+        """The installed copy the UPDATE button updates; None when it launches the game instead (no update, or
+        a platform client such as Steam updates the game itself)."""
+        for g in [entry.primary] + entry.games:
+            if g.installed and g.update_available and g.source not in HANDOFF_SOURCES \
+                    and self.integ(g).supports(base.UPDATE):
+                return g
+        return None
+
     # ------------------------------------------------------- main action
-    def primary_action(self, key: str) -> None:
+    def primary_action(self, key: str, update: bool = True) -> None:
+        """PLAY / UPDATE / INSTALL / STOP. ``update=False`` launches an outdated game instead of updating it
+        (the cover play buttons, which always show a play icon)."""
         e = self.entry(key)
         if not e:
             return
         state = self.game_state(e)
+        target = self.update_target(e) if update and state == "update" else None
         if state == "running":
             self.stop(e)
+        elif target is not None:
+            self.update(target)
         elif state in ("installed", "update"):
             self.play(e)
         elif state == "not_installed":
@@ -96,18 +111,29 @@ class UiController:
             self.w.toast(f"Installing {game.title}", "Added to the download queue")
 
     def update(self, game) -> None:
-        self.s.actions.update(game)
+        job = self.s.actions.update(game)
+        if job:
+            self.w.toast(game.title, f"{job.verb} — added to the download queue")
 
     def repair(self, game) -> None:
         self.s.actions.repair(game)
         self.w.toast(game.title, "Verifying game files")
 
-    def versions(self, game) -> None:
-        from nebula.ui.dialogs.misc import VersionsDialog
+    def versions(self, game, info=None) -> None:
+        """Change-version dialog (update, roll back, switch channel). ``info``: a fresh VersionInfo to show at
+        once; otherwise the dialog loads it."""
+        reason = self.s.actions.busy_reason(game)
+        if reason:
+            self.w.toast(game.title, reason)
+            return
+        from nebula.ui.dialogs.versions import ChangeVersionDialog
 
-        dlg = VersionsDialog(self.s, game, self.w)
-        if dlg.exec() and dlg.selected():
-            self.s.actions.update(game, version=dlg.selected())
+        dlg = ChangeVersionDialog(self.s, game, info, self.w)
+        if dlg.exec() and dlg.choice:
+            c = dlg.choice
+            job = self.s.actions.update(game, version=c["version"], change=c["change"], label=c["label"])
+            if job:
+                self.w.toast(game.title, f"{job.verb} — added to the download queue")
 
     def uninstall(self, game) -> None:
         from nebula.ui.dialogs.misc import UninstallDialog
@@ -308,7 +334,9 @@ class UiController:
             if integ.supports(base.REPAIR):
                 manage.addAction(icons.icon("shield"), "Verify / Repair", lambda: self.repair(game))
             if integ.supports(base.VERSIONS):
-                manage.addAction(icons.icon("history"), "Versions / Roll back…", lambda: self.versions(game))
+                vi = integ.version_info(game, fetch=False)  # no network while building a menu
+                if vi and vi.kind == "builds":
+                    manage.addAction(icons.icon("history"), "Change version…", lambda: self.versions(game))
             if integ.supports(base.DLC):
                 manage.addAction(icons.icon("layers"), "Install DLC…", lambda: self.manage_dlc(game))
             if integ.supports(base.CLOUD_SAVES):

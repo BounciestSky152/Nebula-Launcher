@@ -36,6 +36,33 @@ log = logging.getLogger(__name__)
 RESUME_FILE = ".nebula-resume"
 MARKER_FILE = ".nebula"
 
+
+def branch_label(branch: str | None) -> str:
+    """Human name of a GOG build channel: None/"" is the default "Stable" channel."""
+    if not branch:
+        return "Stable"
+    s = str(branch).replace("_", " ").strip()
+    return s[:1].upper() + s[1:]
+
+
+def nice_date(iso: str | None) -> str:
+    """"2023-06-13T09:19:10+0000" or "2023-06-13" -> "13 Jun 2023" ("" when missing or invalid)."""
+    from datetime import datetime
+
+    if not iso:
+        return ""
+    try:
+        d = datetime.strptime(str(iso)[:10], "%Y-%m-%d")
+    except ValueError:
+        return ""
+    return f"{d.day} {d:%b %Y}"
+
+
+def _branch(build: dict) -> str | None:
+    """Channel of a build: None for the default (Stable) channel."""
+    return build.get("branch") or None
+
+
 LANGUAGE_NAMES = {
     "english": "en-US", "german": "de-DE", "french": "fr-FR", "polish": "pl-PL", "russian": "ru-RU",
     "spanish": "es-ES", "italian": "it-IT", "portuguese": "pt-PT", "brazilian": "pt-BR",
@@ -197,11 +224,37 @@ class Gen2:
         items.sort(key=lambda b: b.get("date_published", ""), reverse=True)
         return items
 
+    @staticmethod
+    def find(builds: list[dict], build_id: str) -> dict | None:
+        """The build with this id; older installs may carry the legacy (pre-Galaxy-2) id instead."""
+        build_id = str(build_id or "")
+        if not build_id:
+            return None
+        return (next((b for b in builds if str(b.get("build_id")) == build_id), None)
+                or next((b for b in builds if str(b.get("legacy_build_id") or "") == build_id), None))
+
+    @staticmethod
+    def latest(builds: list[dict], branch: str | None) -> dict | None:
+        """Newest build on exactly this channel (None/"" = Stable); no fallback to other channels."""
+        branch = branch or None
+        return next((b for b in builds if _branch(b) == branch), None)
+
+    @staticmethod
+    def branches(builds: list[dict]) -> list[str | None]:
+        """Channels that have builds: Stable (None) first, then the others by their newest build."""
+        newest: dict[str | None, str] = {}
+        for b in builds:
+            br, date = _branch(b), b.get("date_published") or ""
+            if br not in newest or date > newest[br]:
+                newest[br] = date
+        others = sorted((br for br in newest if br is not None), key=lambda br: newest[br], reverse=True)
+        return ([None] if None in newest else []) + others
+
     def pick(self, builds: list[dict], build_id: str = "", branch: str | None = None) -> dict | None:
+        """A specific build, or the newest one on ``branch`` (falling back to Stable, never to another beta)."""
         if build_id:
-            return next((b for b in builds if str(b.get("build_id")) == str(build_id)), None)
-        same_branch = [b for b in builds if b.get("branch") == branch]
-        return (same_branch or builds or [None])[0]
+            return self.find(builds, build_id)
+        return self.latest(builds, branch) or self.latest(builds, None)
 
     def build_info(self, build: dict) -> BuildInfo:
         meta, _ = self.api.zjson(build["link"], auth=False)

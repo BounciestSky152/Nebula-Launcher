@@ -158,53 +158,6 @@ class TagsDialog(QDialog):
                 if self.list.item(i).checkState() == Qt.CheckState.Checked]
 
 
-class VersionsDialog(QDialog):
-    """Pick a specific build (rollback / update to a chosen version)."""
-
-    def __init__(self, services, game, parent=None):
-        super().__init__(parent)
-        self.s = services
-        self.game = game
-        self.setWindowTitle(f"Versions — {game.title}")
-        self.setMinimumSize(480, 420)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(18, 18, 18, 18)
-        lay.addWidget(label("Game versions", "SectionTitle"))
-        lay.addWidget(label("Roll back to an earlier build or move to a newer one. Rolling back pins the version so "
-                            "it is not auto-updated.", "Faint", wrap=True))
-        self.spinner = Spinner(20)
-        self.spinner.start()
-        lay.addWidget(self.spinner)
-        self.list = QListWidget()
-        lay.addWidget(self.list, 1)
-        lay.addLayout(_buttons(self, "Install selected version"))
-        self.ok_button.setEnabled(False)
-        self.list.currentItemChanged.connect(lambda cur, _p: self.ok_button.setEnabled(
-            cur is not None and not cur.data(Qt.ItemDataRole.UserRole + 1)))
-        integ = services.integration(game.source)
-        tasks.run_async(integ.versions, game, on_done=self._loaded,
-                        on_error=lambda e: (self.spinner.stop(), self.list.addItem(f"Failed to load versions: {e}")))
-
-    def _loaded(self, versions: list[dict]) -> None:
-        self.spinner.stop()
-        if not versions:
-            self.list.addItem("Version selection is only available for games installed with the GOG Galaxy "
-                              "content system (Windows builds).")
-            return
-        for v in versions:
-            text = f"{v['label']}    {v.get('date', '')}" + (f"   [{v['branch']}]" if v.get("branch") else "")
-            if v.get("current"):
-                text += "    — installed"
-            it = QListWidgetItem(text)
-            it.setData(Qt.ItemDataRole.UserRole, v["id"])
-            it.setData(Qt.ItemDataRole.UserRole + 1, bool(v.get("current")))
-            self.list.addItem(it)
-
-    def selected(self) -> str:
-        it = self.list.currentItem()
-        return it.data(Qt.ItemDataRole.UserRole) if it else ""
-
-
 class UninstallDialog(QDialog):
     def __init__(self, game, has_prefix: bool, parent=None):
         super().__init__(parent)

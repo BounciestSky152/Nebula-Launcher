@@ -39,7 +39,9 @@ IGNORE_IDS = {
 
 
 class ApiError(Exception):
-    pass
+    def __init__(self, msg: str = "", status: int = 0):
+        super().__init__(msg)
+        self.status = status  # HTTP status code (0 = not an HTTP error)
 
 
 def https(url: str) -> str:
@@ -92,14 +94,14 @@ class GogApi:
     def json(self, url: str, auth: bool = True, **kwargs) -> Any:
         r = self._get(url, auth=auth, **kwargs)
         if not r.ok:
-            raise ApiError(f"HTTP {r.status_code} for {url.split('?')[0]}")
+            raise ApiError(f"HTTP {r.status_code} for {url.split('?')[0]}", status=r.status_code)
         return r.json()
 
     def zjson(self, url: str, auth: bool = True) -> tuple[Any, dict]:
         """GET a (possibly zlib compressed) JSON document."""
         r = self._get(url, auth=auth)
         if not r.ok:
-            raise ApiError(f"HTTP {r.status_code} for {url.split('?')[0]}")
+            raise ApiError(f"HTTP {r.status_code} for {url.split('?')[0]}", status=r.status_code)
         try:
             return json.loads(zlib.decompress(r.content, 15)), dict(r.headers)
         except zlib.error:
@@ -154,11 +156,16 @@ class GogApi:
 
     # ----------------------------------------------------------- content
     def builds(self, product_id: str, os_name: str, generation: int = 2) -> list[dict]:
+        """Galaxy builds of a product. A 4xx answer means "no builds" ([]); server errors (5xx), rate limits,
+        timeouts and network errors raise, so callers can tell "GOG has no builds" from "GOG could not be asked"."""
         try:
             data = self.json(f"{CONTENT}/products/{product_id}/os/{os_name}/builds",
                              params={"generation": generation})
-        except ApiError:
-            return []
+        except ApiError as exc:
+            if 400 <= exc.status < 500 and exc.status not in (401, 408, 429):  # those are transient
+                log.debug("no %s builds for %s: %s", os_name, product_id, exc)
+                return []
+            raise
         return data.get("items", []) or []
 
     def secure_link(self, product_id: str, path: str = "/", root: str | None = None) -> list[dict]:

@@ -57,6 +57,8 @@ class Job:
     uid: str = ""
     func: Callable[["JobContext"], Any] | None = None
     can_pause: bool = True
+    verb: str = ""  # queue wording while it runs, e.g. "Rolling back to 1.0" ("" = derived from kind)
+    verb_done: str = ""  # wording once it finished, e.g. "Rolled back to 1.0"
     state: str = QUEUED
     stage: str = "Queued"
     done: int = 0
@@ -181,9 +183,11 @@ class JobManager(QObject):
         on_success: Callable[[Any], Any] | None = None,
         on_failure: Callable[[str], Any] | None = None,
         front: bool = False,
+        verb: str = "",
+        verb_done: str = "",
     ) -> Job:
         job = Job(id=str(next(self._ids)), title=title, kind=kind, uid=uid, func=func, can_pause=can_pause,
-                  on_success=on_success, on_failure=on_failure)
+                  verb=verb, verb_done=verb_done, on_success=on_success, on_failure=on_failure)
         with self._lock:
             if front:
                 idx = next((i for i, j in enumerate(self.jobs) if j.state == QUEUED), len(self.jobs))

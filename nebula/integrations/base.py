@@ -38,6 +38,67 @@ class NotSupported(Exception):
     pass
 
 
+# update(game, ctx, version=...) understands three kinds of ``version``:
+#   ""                 newest build on the channel the copy is installed from
+#   "<build id>"       exactly that build (the copy adopts that build's channel)
+#   branch_target(b)   newest build of channel ``b`` ("" / None = the default channel), resolved when the job runs
+BRANCH_TARGET = "branch:"
+
+
+def branch_target(branch: str | None) -> str:
+    """``update(version=...)`` value meaning "newest build of this channel, resolved when the job runs"."""
+    return BRANCH_TARGET + (branch or "")
+
+
+@dataclass
+class BuildRef:
+    """One installable version of a game (a GOG Galaxy build, or GOG's current offline installer)."""
+
+    id: str = ""  # platform build id; "" for offline installers
+    version: str = ""  # version name / installer version; "" = unknown
+    branch: str = ""  # "" = default channel (Stable)
+    date: str = ""  # YYYY-MM-DD release date of this build
+    published: str = ""  # full publish timestamp, only used for ordering
+    size: int = 0  # installer download size in bytes (0 = unknown)
+    newest: bool = False  # newest build on its own channel
+    current: bool = False  # the installed build
+
+    @property
+    def label(self) -> str:
+        return self.version or (f"Build {self.id}" if self.id else "Unknown version")
+
+
+@dataclass
+class VersionInfo:
+    """Everything the UI shows about the installed version of a game and the versions it can change to."""
+
+    kind: str = "none"  # "builds" (GOG Galaxy builds) | "installer" (offline installer) | "none"
+    method: str = ""  # human readable "Installed with"
+    origin: str = "nebula"  # nebula | heroic | folder
+    platform: str = ""
+    installed: BuildRef = field(default_factory=BuildRef)
+    installed_listed: bool = False  # builds kind: the installed build is still in the platform's list
+    latest: BuildRef | None = None  # newest build on the tracked channel / the current installer
+    branch: str = ""  # tracked channel ("" = Stable)
+    branch_gone: bool = False  # the tracked channel no longer has any builds
+    branches: list = field(default_factory=list)  # list[str]: "" first (if it has builds), then others
+    builds: list = field(default_factory=list)  # list[BuildRef], every channel, newest first
+    status: str = "unknown"  # up_to_date | behind | channel_ended | unlisted | different | unknown
+    newer_count: int = 0  # builds on the tracked channel newer than the installed one
+    update_available: bool = False  # ignores the pin; the stored Game flag is this and not pinned
+    can_choose: bool = False  # other versions / channels can be picked
+    can_update: bool = False
+    pinned: bool = False  # per-game "stay on this version"
+    auto_update: bool = True  # per-game automatic updates
+    note: str = ""  # limitation text, shown verbatim
+    error: str = ""  # "" | "signed_out" | "offline" | "failed"
+    error_text: str = ""
+    stale: bool = False  # data came from the saved summary / an expired cache
+    checked_at: float = 0.0  # wall time of the data behind ``latest``
+    updated_at: float = 0.0  # last install / update of this copy
+    has_password: bool = False  # a beta channel password is stored (reserved)
+
+
 @dataclass
 class InstallOptions:
     platforms: list = field(default_factory=list)  # e.g. ["linux", "windows"]
@@ -45,8 +106,9 @@ class InstallOptions:
     languages: list = field(default_factory=list)  # list of (code, label)
     language: str = ""
     dlcs: list = field(default_factory=list)  # list of {"id", "title", "size"}
-    versions: list = field(default_factory=list)  # list of {"id", "label", "date"}
+    versions: list = field(default_factory=list)  # list of {"id", "label", "date", "branch"}
     version: str = ""
+    latest: str = ""  # id of the newest default-channel version ("" = unknown / not applicable)
     download_size: int = 0
     disk_size: int = 0
     install_dir: str = ""
@@ -151,6 +213,8 @@ class Integration:
         raise NotSupported()
 
     def update(self, game: Game, ctx: "JobContext", version: str = "") -> Game:
+        """Update or change the installed version. ``version`` is "" (newest on the installed channel), a build
+        id, or ``branch_target(channel)``. Integrations that cannot honour a version raise NotSupported."""
         raise NotSupported()
 
     def repair(self, game: Game, ctx: "JobContext") -> Game:
@@ -158,6 +222,14 @@ class Integration:
 
     def versions(self, game: Game) -> list[dict]:
         return []
+
+    def version_info(self, game: Game, fetch: bool = True, refresh: bool = False) -> VersionInfo | None:
+        """Installed / newest version and the versions this copy can change to.
+
+        None means this integration (or this copy) has no version management. With ``fetch=True`` this may
+        block on the network, so call it from a worker thread; ``fetch=False`` must never touch the network
+        (it is called on the GUI thread). Network and API errors are reported in ``.error``, never raised."""
+        return None
 
     def import_path(self, path: str) -> list[Game]:
         return []

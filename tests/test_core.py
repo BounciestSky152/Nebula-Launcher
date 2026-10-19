@@ -233,3 +233,148 @@ def test_run_async_delivers_errors_to_callback(qapp):
         QCoreApplication.processEvents()
         time.sleep(0.01)
     assert got and isinstance(got[0], ValueError) and str(got[0]) == "kaput"
+
+
+def _pump_until(cond, timeout: float = 5.0) -> None:
+    from PySide6.QtCore import QCoreApplication
+
+    deadline = time.time() + timeout
+    while not cond() and time.time() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.02)
+    QCoreApplication.processEvents()
+
+
+def _installed_gog(services, **kw) -> Game:
+    g = Game("gog", "123", "Witcher", installed=True, platform="windows", build_id="b1", version="1.0",
+             install_path="/games/witcher", **kw)
+    services.db.replace_source("gog", [g])
+    services.library.load()
+    return services.library.game("gog:123")
+
+
+def test_actions_update_wording_and_busy(qapp, services, monkeypatch):
+    gog = services.integration("gog")
+    g = _installed_gog(services)
+    gate = threading.Event()
+    calls = []
+
+    def fake_update(game, ctx, version=""):
+        calls.append(version)
+        gate.wait(5)
+        return game
+
+    monkeypatch.setattr(gog, "update", fake_update)
+    errors = []
+
+    def on_error(title, body):
+        errors.append((title, body))
+
+    services.bus.error.connect(on_error)
+    try:
+        job = services.actions.update(g, version="b1", change="rollback", label="1.0")
+        assert job.verb == "Rolling back to 1.0" and job.verb_done == "Rolled back to 1.0"
+        assert job.title == "Witcher" and job.kind == "update" and job.uid == g.uid
+        # Jobs.submit doesn't dedupe per game: the busy guard in Actions.update has to refuse
+        assert services.actions.update(g) is None
+        assert errors[-1] == ("Witcher", "Wait for the current download for this game to finish.")
+        gate.set()
+        _pump_until(lambda: not job.active)
+        assert job.state == "done" and calls == ["b1"]
+
+        services.launcher.running[g.uid] = object()
+        try:
+            assert services.actions.update(g) is None and errors[-1][1] == "Close the game first."
+        finally:
+            del services.launcher.running[g.uid]
+        services.launcher.preparing[g.uid] = "Preparing…"
+        try:
+            assert services.actions.busy_reason(g) == "Close the game first."
+            assert services.actions.update(g) is None
+        finally:
+            del services.launcher.preparing[g.uid]
+        assert calls == ["b1"], "refused changes never reach the integration"
+
+        # the plain call (auto-update, UPDATE button) keeps working and keeps the old wording
+        plain = services.actions.update(g)
+        assert (plain.verb, plain.verb_done) == ("Updating", "Update complete")
+        _pump_until(lambda: not plain.active)
+        switch = services.actions.update(g, version="branch:public_beta", change="switch", label="Public beta 2.1")
+        assert (switch.verb, switch.verb_done) == ("Switching to Public beta 2.1", "Switched to Public beta 2.1")
+        _pump_until(lambda: not switch.active)
+        other = services.actions.update(g, version="b2")
+        assert (other.verb, other.verb_done) == ("Changing version", "Version changed")
+        _pump_until(lambda: not other.active)
+        assert calls == ["b1", "", "branch:public_beta", "b2"]
+    finally:
+        gate.set()
+        services.bus.error.disconnect(on_error)
+
+
+def test_set_version_pin_and_apply_version_info(qapp, services, monkeypatch):
+    from nebula.integrations.base import BuildRef, VersionInfo
+
+    gog = services.integration("gog")
+    g = _installed_gog(services, update_available=True)
+    uid = g.uid
+    seen = []
+
+    def version_info(game, fetch=True, refresh=False):
+        seen.append(fetch)
+        if fetch:
+            pytest.fail("set_version_pin must not touch the network")
+        # what the saved record summary says: b2 is newer than the installed b1
+        return VersionInfo(kind="builds", installed=BuildRef(id="b1", version="1.0", current=True),
+                           latest=BuildRef(id="b2", version="2.0", newest=True), status="behind",
+                           update_available=True, stale=True,
+                           pinned=bool(services.db.get_config(uid).get("pin_version")))
+
+    monkeypatch.setattr(gog, "version_info", version_info)
+    changed = []
+
+    def on_changed(key):
+        changed.append(key)
+
+    services.bus.game_changed.connect(on_changed)
+    try:
+        services.actions.set_version_pin(g, True)
+        assert services.db.get_config(uid)["pin_version"] is True
+        assert services.library.game(uid).update_available is False and changed and seen == []
+        changed.clear()
+        services.actions.set_version_pin(g, False)
+        assert services.db.get_config(uid)["pin_version"] is False
+        assert services.library.game(uid).update_available is True and changed and seen == [False]
+        services.library.load()
+        assert services.library.game(uid).update_available is True, "the flag is saved"
+    finally:
+        services.bus.game_changed.disconnect(on_changed)
+
+    def live(**kw):
+        kw.setdefault("installed", BuildRef(id="b1", version="1.0.1", current=True))
+        return VersionInfo(kind="builds", **kw)
+
+    apply = services.actions.apply_version_info
+    assert not apply(uid, "b1", live(stale=True))
+    assert not apply(uid, "b1", live(error="offline", error_text="Couldn't reach GOG."))
+    assert not apply(uid, "b0", live()), "result for a build that is no longer installed"
+    assert not apply(uid, "b1", None)
+    assert not apply("gog:999", "b1", live())
+    gate = threading.Event()
+    job = services.jobs.submit("Witcher", "update", lambda ctx: gate.wait(5), uid=uid)
+    try:
+        assert not apply(uid, "b1", live()), "a running job will rewrite the install"
+    finally:
+        gate.set()
+    _pump_until(lambda: not job.active)
+    g = services.library.game(uid)
+    assert g.update_available is True and g.version == "1.0", "ignored results change nothing"
+
+    assert apply(uid, "b1", live()) is True
+    g = services.library.game(uid)
+    assert g.update_available is False and g.version == "1.0.1"
+    assert apply(uid, "b1", live()) is False, "nothing to change"
+    assert apply(uid, "b1", live(update_available=True)) is True and services.library.game(uid).update_available
+    # the pin is read when the result is applied: a pin set while the check was running wins over the result
+    services.db.update_config(uid, pin_version=True)
+    assert apply(uid, "b1", live(update_available=True, pinned=False)) is True
+    assert services.library.game(uid).update_available is False, "pinned games never show UPDATE"

@@ -128,6 +128,7 @@ class InstallDialog(QDialog):
             text = v["label"] + (f"  •  {v['date']}" if v.get("date") else "") + (
                 f"  [{v['branch']}]" if v.get("branch") else "")
             self.version.addItem(text, v["id"])
+        self.version.setCurrentIndex(max(0, self.version.findData(opts.latest or opts.version)))
         self.version.setEnabled(len(opts.versions) > 1)
         if not self.path.text() or not self.path.isModified():
             self.path.setText(str(Path(opts.install_dir).parent))
@@ -186,8 +187,10 @@ class InstallDialog(QDialog):
         dlcs = [self.dlcs.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.dlcs.count())
                 if self.dlcs.item(i).checkState() == Qt.CheckState.Checked]
         version = self.version.currentData() or ""
-        if self.opts and self.opts.versions and version == self.opts.versions[0]["id"]:
-            version = ""  # latest
+        opts = self.opts
+        latest = (getattr(opts, "latest", "") or (opts.versions[0]["id"] if opts.versions else "")) if opts else ""
+        if version and version == latest:
+            version = ""  # newest: resolved when the job runs, and doesn't pin the version
         return InstallRequest(platform=self.platform.currentData() or "", language=self.language.currentData() or "",
                               dlcs=dlcs, version=version, base_dir=self.path.text().strip(),
                               shortcut=self.shortcut.isChecked())
