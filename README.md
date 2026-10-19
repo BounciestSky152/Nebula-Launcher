@@ -1,5 +1,10 @@
 # Nebula — a GOG Galaxy-style launcher for Linux
 
+First off, yes this was vibe coded and no this is not associated with the old nebula project from years ago. This is something
+I was going to keep private, but am forced to make public in order for certain features to work. This is the closest we will probably
+get to a dedicated GOG launcher for the near foreseeable future.
+
+
 Nebula is a GOG launcher first. Sign in with GOG and your GOG library, the GOG store, your wishlist, cloud saves,
 achievements and GOG friends sit at the centre of the app, the way they do in GOG Galaxy 2.0. Your **Steam**,
 **Epic Games** (through Legendary/Heroic), **Lutris** and hand-added games join the same library alongside them.
