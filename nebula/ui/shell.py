@@ -37,7 +37,17 @@ class SectionHeader(QWidget):
         super().__init__()
         self._text = text.upper()
         self.indent = 0  # set by OrbitPanel
+        self.collapsed = False
+        self.on_toggle = None  # called with the new collapsed state
         self.setFixedHeight(30)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Click to fold or unfold")
+
+    def mousePressEvent(self, _e):  # noqa: N802
+        self.collapsed = not self.collapsed
+        self.update()
+        if self.on_toggle:
+            self.on_toggle(self.collapsed)
 
     def setText(self, text: str) -> None:  # noqa: N802
         self._text = text.upper()
@@ -61,7 +71,21 @@ class SectionHeader(QWidget):
         line = QLinearGradient(x, 0, self.width() - 14, 0)
         line.setColorAt(0, QColor(183, 156, 255, 90))
         line.setColorAt(1, QColor(183, 156, 255, 0))
-        p.fillRect(QRectF(x, y - 3.5, max(0, self.width() - 14 - x), 1), line)
+        p.fillRect(QRectF(x, y - 3.5, max(0, self.width() - 34 - x), 1), line)
+        # fold arrow at the right
+        ax, ay = self.width() - 22, y - 3.5
+        arrow = QPainterPath()
+        if self.collapsed:  # pointing right
+            arrow.moveTo(ax - 2, ay - 4)
+            arrow.lineTo(ax + 2.5, ay)
+            arrow.lineTo(ax - 2, ay + 4)
+        else:  # pointing down
+            arrow.moveTo(ax - 4, ay - 2)
+            arrow.lineTo(ax, ay + 2.5)
+            arrow.lineTo(ax + 4, ay - 2)
+        p.setPen(QPen(QColor(141, 134, 186), 1.4))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPath(arrow)
 
 
 class BrandMark(QWidget):
@@ -134,6 +158,9 @@ class OrbitPanel(QWidget):
         t = min(1.0, max(0.0, y / max(1, self.height())))
         return self.BULGE * math.sin(math.pi * t) + self.WOBBLE * math.sin(y / 23.0) * math.sin(y / 61.0 + 1.3)
 
+    def _cy(self, w: QWidget) -> float:
+        return w.mapTo(self, QPoint(0, w.height() // 2)).y()
+
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)
         QTimer.singleShot(0, self.arrange)
@@ -141,7 +168,7 @@ class OrbitPanel(QWidget):
     def arrange(self) -> None:
         for w in self.findChildren(QWidget):
             if isinstance(w, (SidebarButton, SectionHeader)) and w.isVisible():
-                indent = int(round(self._offset(w.geometry().center().y())))
+                indent = int(round(self._offset(self._cy(w))))
                 if indent != w.indent:
                     w.indent = indent
                     if isinstance(w, SidebarButton):
@@ -150,7 +177,7 @@ class OrbitPanel(QWidget):
         self.update()
 
     def paintEvent(self, _e):  # noqa: N802
-        nodes = sorted((w.geometry().center().y() - (3.5 if isinstance(w, SectionHeader) else 0), w)
+        nodes = sorted((self._cy(w) - (3.5 if isinstance(w, SectionHeader) else 0), w)
                        for w in self.findChildren(QWidget)
                        if isinstance(w, (SidebarButton, SectionHeader)) and w.isVisible())
         if len(nodes) < 2:
@@ -390,7 +417,25 @@ class Sidebar(QWidget):
 
     def _section(self, text: str) -> SectionHeader:
         lb = SectionHeader(text)
+        box = QWidget()
+        box.setStyleSheet("background: transparent;")
+        self._target = QVBoxLayout(box)
+        self._target.setContentsMargins(0, 0, 0, 0)
+        self._target.setSpacing(2)
         self.lay.addWidget(lb)
+        self.lay.addWidget(box)
+        folded = set(self.s.settings.get("sidebar.collapsed") or [])
+        lb.collapsed = text.upper() in folded
+        box.setVisible(not lb.collapsed)
+
+        def toggle(collapsed: bool, name=text.upper(), box=box) -> None:
+            box.setVisible(not collapsed)
+            now = set(self.s.settings.get("sidebar.collapsed") or [])
+            (now.add if collapsed else now.discard)(name)
+            self.s.settings.set("sidebar.collapsed", sorted(now))
+            QTimer.singleShot(0, self.orbit.arrange)
+
+        lb.on_toggle = toggle
         return lb
 
     def _add(self, key: str, text: str, icon_name: str | None = None, pixmap=None) -> SidebarButton:
@@ -398,7 +443,7 @@ class Sidebar(QWidget):
         self.group.addButton(b)
         self.buttons[key] = b
         b.clicked.connect(lambda: self._clicked(key))
-        self.lay.addWidget(b)
+        self._target.addWidget(b)
         return b
 
     def _build(self) -> None:
@@ -418,11 +463,10 @@ class Sidebar(QWidget):
         for integ in self.s.integrations.values():
             if integ.id != "gog":
                 self._add(f"library:source:{integ.id}", integ.name, pixmap=icons.badge(integ.letter, integ.color, 18))
-        self.views_header = SectionHeader("Views")
-        self.lay.addWidget(self.views_header)
+        self.views_header = self._section("Views")
         self.views_box = QVBoxLayout()
         self.views_box.setSpacing(2)
-        self.lay.addLayout(self.views_box)
+        self._target.addLayout(self.views_box)
         self._add("library:hidden", "Hidden games", "eye-off")
         self._section("Activity")
         self._add("downloads", "Downloads", "download")
