@@ -1,6 +1,7 @@
 """Sidebar and top bar (GOG-first layout, modelled on GOG Galaxy 2.0)."""
 from __future__ import annotations
 
+import math
 import random
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, QStringListModel, Qt, QTimer, Signal
@@ -15,6 +16,7 @@ from nebula.ui.widgets.common import Avatar, Spinner, icon_button, label
 
 
 LAVENDER = QColor(183, 156, 255)
+NODE_X = 12  # x of the orbit line the sidebar items hang on
 ITEM_TEXT, ITEM_TEXT_ON = "#b4aed6", "#ffffff"
 ITEM_ICON, ITEM_ICON_ON = "#8f88bd", "#e2d6ff"
 
@@ -34,6 +36,7 @@ class SectionHeader(QWidget):
     def __init__(self, text: str):
         super().__init__()
         self._text = text.upper()
+        self.indent = 0  # set by OrbitPanel
         self.setFixedHeight(30)
 
     def setText(self, text: str) -> None:  # noqa: N802
@@ -47,15 +50,16 @@ class SectionHeader(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         y = self.height() - 9
-        _sparkle(p, QPointF(21, y - 3.5), 4, LAVENDER)
+        x0 = NODE_X + self.indent
+        _sparkle(p, QPointF(x0, y - 3.5), 4.2, LAVENDER)
         f = QFont(self.font())
         f.setPointSizeF(7.2)
         f.setWeight(QFont.Weight.Bold)
         f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2.6)
         p.setFont(f)
         p.setPen(QColor(141, 134, 186))
-        p.drawText(QPointF(31, y), self._text)
-        x = 31 + p.fontMetrics().horizontalAdvance(self._text) + 8
+        p.drawText(QPointF(x0 + 10, y), self._text)
+        x = x0 + 10 + p.fontMetrics().horizontalAdvance(self._text) + 8
         line = QLinearGradient(x, 0, self.width() - 14, 0)
         line.setColorAt(0, QColor(183, 156, 255, 90))
         line.setColorAt(1, QColor(183, 156, 255, 0))
@@ -122,6 +126,57 @@ class BrandMark(QWidget):
         p.drawText(QPointF(63, 47), "GOG LAUNCHER")
 
 
+class OrbitPanel(QWidget):
+    """Holds the sidebar items and bends them along an orbit: each item hangs off a node on a faint curved
+    line, so the list reads as a constellation instead of a straight column."""
+
+    BULGE = 24  # how far the middle of the orbit swings out
+
+    def _offset(self, y: float) -> int:
+        return int(round(self.BULGE * math.sin(math.pi * min(1.0, max(0.0, y / max(1, self.height()))))))
+
+    def resizeEvent(self, e):  # noqa: N802
+        super().resizeEvent(e)
+        QTimer.singleShot(0, self.arrange)
+
+    def arrange(self) -> None:
+        for w in self.findChildren(QWidget):
+            if isinstance(w, (SidebarButton, SectionHeader)) and w.isVisible():
+                indent = self._offset(w.geometry().center().y())
+                if indent != w.indent:
+                    w.indent = indent
+                    if isinstance(w, SidebarButton):
+                        w.layout().setContentsMargins(26 + indent, 0, 12, 0)
+                    w.update()
+        self.update()
+
+    def paintEvent(self, _e):  # noqa: N802
+        nodes = sorted((w.geometry().center().y() - (3.5 if isinstance(w, SectionHeader) else 0), w)
+                       for w in self.findChildren(QWidget)
+                       if isinstance(w, (SidebarButton, SectionHeader)) and w.isVisible())
+        if len(nodes) < 2:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pts = [QPointF(NODE_X + self._offset(y) + 0.5, y) for y, _w in nodes]
+        path = QPainterPath(pts[0])
+        for a, b in zip(pts, pts[1:]):  # smooth through the nodes
+            mid = (a.y() + b.y()) / 2
+            path.cubicTo(QPointF(a.x(), mid), QPointF(b.x(), mid), b)
+        line = QLinearGradient(0, pts[0].y(), 0, pts[-1].y())
+        line.setColorAt(0, QColor(183, 156, 255, 110))
+        line.setColorAt(0.5, QColor(140, 170, 255, 70))
+        line.setColorAt(1, QColor(110, 200, 255, 25))
+        p.setPen(QPen(QBrush(line), 1.1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPath(path)
+        p.setPen(Qt.PenStyle.NoPen)
+        for pt, (_y, w) in zip(pts, nodes):
+            if isinstance(w, SidebarButton) and not w.isChecked():
+                p.setBrush(QColor(200, 185, 255, 150))
+                p.drawEllipse(pt, 1.7, 1.7)
+
+
 class SidebarButton(QPushButton):
     def __init__(self, text: str, icon_name: str | None = None, pixmap=None):
         super().__init__()
@@ -130,7 +185,8 @@ class SidebarButton(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(34)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(14, 0, 12, 0)
+        lay.setContentsMargins(26, 0, 12, 0)
+        self.indent = 0  # set by OrbitPanel
         lay.setSpacing(10)
         self.ic = QLabel()
         self.ic.setFixedSize(18, 18)
@@ -175,7 +231,7 @@ class SidebarButton(QPushButton):
             return
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r = QRectF(self.rect()).adjusted(10.5, 2.5, -10.5, -2.5)
+        r = QRectF(self.rect()).adjusted(NODE_X + 8.5 + self.indent, 2.5, -10.5, -2.5)
         path = QPainterPath()
         path.addRoundedRect(r, r.height() / 2, r.height() / 2)
         if not on:
@@ -193,7 +249,7 @@ class SidebarButton(QPushButton):
         edge.setColorAt(1, QColor(205, 185, 255, 0))
         p.setPen(QPen(QBrush(edge), 1))
         p.drawPath(path)
-        star = QPointF(5, r.center().y())  # a docked star beside the capsule
+        star = QPointF(NODE_X + self.indent, r.center().y())  # the item's node on the orbit lights up
         glow = QRadialGradient(star, 7)
         glow.setColorAt(0, QColor(210, 190, 255, 200))
         glow.setColorAt(1, QColor(210, 190, 255, 0))
@@ -254,7 +310,7 @@ class Sidebar(QWidget):
         area.setWidgetResizable(True)
         area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         area.viewport().setAutoFillBackground(False)
-        inner = QWidget()
+        inner = self.orbit = OrbitPanel()
         inner.setStyleSheet("background: transparent;")
         self.lay = QVBoxLayout(inner)
         self.lay.setContentsMargins(0, 0, 0, 10)
