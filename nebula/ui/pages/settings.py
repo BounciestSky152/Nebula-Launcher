@@ -14,7 +14,7 @@ from nebula.runners import manager as runner_manager
 from nebula.runners.compat import find_umu
 from nebula.ui import icons, theme
 from nebula.ui.pages.base import Page
-from nebula.ui.widgets.common import button, card, clear_layout, label
+from nebula.ui.widgets.common import button, card, clear_layout, icon_button, label
 
 LANGUAGES = [("en-US", "English"), ("de-DE", "Deutsch"), ("fr-FR", "Français"), ("es-ES", "Español"),
              ("it-IT", "Italiano"), ("pl-PL", "Polski"), ("pt-BR", "Português (Brasil)"),
@@ -149,22 +149,20 @@ class SettingsPage(Page):
         th.setCurrentIndex(max(0, th.findData(self.st.get("appearance.theme") or "nebula")))
         th.currentIndexChanged.connect(lambda _i: self.st.set("appearance.theme", th.currentData()))
         fa.addRow("Theme", th)
-        combos = {k: self.font_combo(k) for k in ("appearance.font_ui", "appearance.font_display",
-                                                   "appearance.font_sidebar")}
-        fa.addRow("Interface font", combos["appearance.font_ui"])
-        fa.addRow("Titles && logo font", combos["appearance.font_display"])
-        fa.addRow("Sidebar font", combos["appearance.font_sidebar"])
-        reset = button("Reset fonts to default", "refresh")
-        reset.setMaximumWidth(260)
+        from nebula.core.settings import DEFAULTS
 
-        def reset_fonts() -> None:
-            from nebula.core.settings import DEFAULTS
-
-            for k, c in combos.items():
-                c.setCurrentIndex(max(0, c.findData(DEFAULTS.get(k) or "")))  # also saves the setting
-
-        reset.clicked.connect(reset_fonts)
-        fa.addRow("", reset)
+        for key, name in (("appearance.font_ui", "Interface font"), ("appearance.font_display", "Titles && logo font"),
+                          ("appearance.font_sidebar", "Sidebar font")):
+            combo = self.font_combo(key)
+            reset = icon_button("refresh", "Reset this font to its default")
+            # each font resets on its own (the interface font's default is the system font)
+            reset.clicked.connect(lambda _c=False, c=combo, k=key: c.setCurrentIndex(
+                max(0, c.findData(DEFAULTS.get(k) or ""))))
+            row = QHBoxLayout()
+            row.addWidget(combo)
+            row.addWidget(reset)
+            row.addStretch(1)
+            fa.addRow(name, row)
         lay.addWidget(ga)
         g, f = self.group("Application")
         f.addRow(self.check("general.show_tray", "Show icon in the system tray"))
