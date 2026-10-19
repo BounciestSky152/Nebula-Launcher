@@ -84,6 +84,17 @@ QPushButton#SidebarButton {{
     color: {TEXT_DIM};
     background: transparent;
 }}
+QPushButton#SidebarTool {{
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(183, 156, 255, 0.18);
+    border-radius: 6px;
+    padding: 6px;
+    color: {TEXT};
+}}
+QPushButton#SidebarTool:hover {{
+    background: rgba(140, 98, 212, 0.22);
+    border-color: rgba(183, 156, 255, 0.5);
+}}
 QPushButton#SidebarAdd {{
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(183, 156, 255, 0.25);

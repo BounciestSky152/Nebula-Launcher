@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         mid.setContentsMargins(0, 0, 0, 0)
         mid.setSpacing(0)
         self.topbar = TopBar(services, self.ctl, self)
+        self.sidebar.dock_tools(self.topbar)
         self.topbar.search_submitted.connect(self._search)
         mid.addWidget(self.topbar)
         self.update_banner = UpdateBanner(services, self)

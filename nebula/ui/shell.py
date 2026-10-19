@@ -8,7 +8,7 @@ from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, QStringListModel, Qt,
 from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap,
                            QRadialGradient)
 from PySide6.QtWidgets import (QButtonGroup, QCompleter, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton,
-                               QScrollArea, QVBoxLayout, QWidget)
+                               QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 
 from nebula.core.utils import xdg_open
 from nebula.ui import icons, theme
@@ -227,6 +227,9 @@ class SidebarButton(QPushButton):
         for w in (self.ic, self.text_lbl, self.count, self.spinner):
             w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             w.setStyleSheet(w.styleSheet() + "background: transparent;")
+        # the count keeps its room; a long name gives way instead
+        self.count.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
+        self.text_lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         lay.addWidget(self.ic)
         lay.addWidget(self.text_lbl, 1)
         lay.addWidget(self.spinner)
@@ -316,7 +319,7 @@ class Sidebar(QWidget):
         self.win = window
         self.setObjectName("Sidebar")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setFixedWidth(236)
+        self.setFixedWidth(256)
         self._bg: QPixmap | None = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -348,6 +351,10 @@ class Sidebar(QWidget):
         self.buttons: dict[str, SidebarButton] = {}
         self._build()
         # Galaxy's "Add games & friends" button
+        self.tools = QHBoxLayout()  # filled by dock_tools() once the top bar exists
+        self.tools.setContentsMargins(12, 8, 12, 0)
+        self.tools.setSpacing(6)
+        outer.addLayout(self.tools)
         bottom = QHBoxLayout()
         bottom.setContentsMargins(12, 8, 12, 14)
         add = QPushButton("  Add games && friends")
@@ -516,6 +523,18 @@ class Sidebar(QWidget):
     def _schedule_counts(self) -> None:
         self._count_timer.start()
 
+    def dock_tools(self, topbar) -> None:
+        """Settings, downloads and sync sit at the bottom left, above "Add games & friends"."""
+        for w, tip in ((topbar.settings_btn, "Settings (Ctrl+,)"), (topbar.dl, "Downloads"),
+                       (topbar.sync, "Sync all platforms (F5)")):
+            w.setObjectName("SidebarTool")
+            w.setToolTip(tip)
+            w.setMinimumHeight(34)
+            self.tools.addWidget(w, 1)
+        self.tools.addWidget(topbar.sync_spinner)
+        topbar.sync_lbl.setParent(self)  # its text becomes the sync button's tooltip
+        topbar.sync_lbl.hide()
+
     def check_wishlist(self) -> None:
         """Hide the Wishlist entry when GOG doesn't share the wishlist (or nobody is signed in)."""
         gog = self.s.integrations.get("gog")
@@ -632,13 +651,9 @@ class TopBar(QWidget):
         self.sync_spinner = Spinner(16)
         self.sync_spinner.hide()
         self.sync_lbl = label("", "Faint")
-        lay.addSpacing(6)
-        lay.addWidget(self.sync_spinner)
-        lay.addWidget(self.sync_lbl)
         lay.addStretch(1)
         self.sync = icon_button("refresh", "Sync all platforms (F5)")
         self.sync.clicked.connect(lambda: self.s.library.refresh())
-        lay.addWidget(self.sync)
         self.dl = QPushButton()
         self.dl.setObjectName("IconButton")
         self.dl.setIcon(icons.icon("download"))
@@ -646,7 +661,6 @@ class TopBar(QWidget):
         self.dl.setToolTip("Downloads")
         self.dl.setCursor(Qt.CursorShape.PointingHandCursor)
         self.dl.clicked.connect(lambda: self.win.navigate("downloads"))
-        lay.addWidget(self.dl)
         self.friends = QPushButton()
         self.friends.setObjectName("IconButton")
         self.friends.setIcon(icons.icon("users"))
@@ -681,7 +695,7 @@ class TopBar(QWidget):
         lay.addWidget(self.avatar_btn)
         self.settings_btn = icon_button("settings", "Settings (Ctrl+,)", size=19)
         self.settings_btn.clicked.connect(lambda: self.win.navigate("settings"))
-        lay.addWidget(self.settings_btn)
+        # sync, downloads and settings live in the sidebar's tool row (Sidebar.dock_tools)
         services.bus.sync_state.connect(self._sync)
         services.bus.library_changed.connect(self._update_titles)
         services.bus.jobs_changed.connect(self._downloads)
@@ -732,9 +746,11 @@ class TopBar(QWidget):
             self.sync_spinner.start()
             names = [self.s.integrations[i].name for i in syncing if i in self.s.integrations]
             self.sync_lbl.setText("Syncing " + ", ".join(names))
+            self.sync.setToolTip(self.sync_lbl.text())
         else:
             self.sync_spinner.stop()
             self.sync_lbl.setText("")
+            self.sync.setToolTip("Sync all platforms (F5)")
 
     def _update_titles(self) -> None:
         self._titles.setStringList(sorted({e.title for e in self.s.library.all_entries() if not e.user.hidden},

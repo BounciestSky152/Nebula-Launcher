@@ -10,23 +10,22 @@ from PySide6.QtSvg import QSvgRenderer
 from nebula.ui import theme
 
 ICONS: dict[str, str] = {
-    "home": '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+    "home": '<path d="M4 11.5l8-6.5 8 6.5"/><path d="M6 10.5V20h12v-9.5"/><path d="M12 12.6l.9 2 2 .9-2 .9-.9 2-.9-2-2-.9 2-.9z"/>',
     "recent": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     "grid": '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/>'
             '<rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
     "list": '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/>'
             '<circle cx="4.5" cy="18" r="1"/>',
-    "library": '<path d="M4 4h4v16H4zM10 4h4v16h-4z"/><path d="M16 5l3.5-1 3 15.5-3.5 1z"/>',
-    "installed": '<path d="M5 12l4 4 10-10"/><path d="M4 20h16"/>',
-    "download": '<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>',
-    "store": '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+    "library": '<rect x="4" y="5.5" width="11" height="14.5" rx="1.5"/><path d="M8 3h10.5A1.5 1.5 0 0 1 20 4.5V17"/><circle cx="9.5" cy="12.7" r="2.4"/><path d="M5.6 15.3c2.6-1.3 5.2-3.2 7.7-5.6"/>',
+    "installed": '<circle cx="12" cy="12" r="8.5"/><path d="M8 12.3l2.7 2.7 5.5-5.5"/><circle cx="19" cy="5" r="1.2"/>',
+    "download": '<path d="M12 3.5v10"/><path d="M8 10l4 4 4-4"/><ellipse cx="12" cy="18.6" rx="7.5" ry="2.4"/>',
+    "store": '<path d="M5.5 8.5h13l-1.2 11.5H6.7z"/><path d="M9 8.5V7a3 3 0 0 1 6 0v1.5"/><path d="M2.5 14.5c4.5 2.2 14.5 2.2 19 0"/>',
     "heart": '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
     "users": '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/>'
              '<path d="M18 14a6 6 0 0 1 3.5 6"/>',
     "user": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
-    "chart": '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
-    "settings": '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1'
-                'M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+    "chart": '<path d="M5 20v-6M10 20v-9M15 20v-5M3 20h18"/><path d="M18.5 3.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>',
+    "settings": '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21"/><ellipse cx="12" cy="12" rx="9.2" ry="3.4" transform="rotate(-35 12 12)"/>',
     "search": '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
     "play": '<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>',
     "pause": '<path d="M8 5v14M16 5v14"/>',
@@ -37,11 +36,10 @@ ICONS: dict[str, str] = {
     "x": '<path d="M6 6l12 12M18 6L6 18"/>',
     "plus": '<path d="M12 5v14M5 12h14"/>',
     "minus": '<path d="M5 12h14"/>',
-    "refresh": '<path d="M20 11a8 8 0 0 0-14.5-4.5L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.5 4.5L20 16"/>'
-               '<path d="M20 21v-5h-5"/>',
+    "refresh": '<path d="M20 11a8 8 0 0 0-14.5-4.5L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.5 4.5L20 16"/><path d="M20 21v-5h-5"/><circle cx="12" cy="12" r="1.8"/>',
     "folder": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     "cloud": '<path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5z"/>',
-    "star": '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>',
+    "star": '<path d="M11 3l1.8 5.2L18 10l-5.2 1.8L11 17l-1.8-5.2L4 10l5.2-1.8z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
     "star-filled": '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z" '
                    'fill="currentColor"/>',
     "back": '<path d="M15 5l-7 7 7 7"/>',
@@ -97,10 +95,11 @@ ICONS: dict[str, str] = {
 }
 
 
-def _svg(name: str, color: str, stroke: float = 1.8) -> bytes:
+def _svg(name: str, color: str, stroke: float = 1.8, opacity: float = 1.0) -> bytes:
     body = ICONS.get(name, ICONS["info"]).replace("currentColor", color)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" '
-            f'stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round">{body}</svg>').encode()
+            f'stroke-opacity="{opacity}" stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round">'
+            f'{body}</svg>').encode()
 
 
 @lru_cache(maxsize=1024)
@@ -108,10 +107,11 @@ def pixmap(name: str, size: int = 18, color: str = theme.TEXT_DIM, ratio: float 
     px = int(size * ratio)
     pm = QPixmap(px, px)
     pm.fill(Qt.GlobalColor.transparent)
-    renderer = QSvgRenderer(QByteArray(_svg(name, color)))
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    renderer.render(p, QRectF(0, 0, px, px))
+    # a faint wide stroke underneath gives the line icons a starlight glow
+    QSvgRenderer(QByteArray(_svg(name, color, 4.2, 0.18))).render(p, QRectF(0, 0, px, px))
+    QSvgRenderer(QByteArray(_svg(name, color))).render(p, QRectF(0, 0, px, px))
     p.end()
     pm.setDevicePixelRatio(ratio)
     return pm
