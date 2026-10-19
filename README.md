@@ -6,7 +6,7 @@ get to a dedicated GOG launcher for the near foreseeable future. If you are inte
 place for a future project feel free to fork it.
 
 
-#Installation
+# Installation
 
 /scripts/install.sh
 
