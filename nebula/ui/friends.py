@@ -51,10 +51,11 @@ class FriendsPanel(QWidget):
     def __init__(self, services):
         super().__init__()
         self.s = services
-        self.setObjectName("Sidebar")
+        self.setObjectName("FriendsPanel")  # not #Sidebar: the sidebar paints its own (transparent) background
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedWidth(270)
-        self.setStyleSheet(f"#Sidebar {{ border-left: 1px solid {theme.BORDER}; border-right: none; }}")
+        self.setStyleSheet(f"#FriendsPanel {{ background: {theme.GLASS_DARK}; "
+                           f"border-left: 1px solid {theme.GLASS_BORDER}; }}")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 14, 12, 12)
         lay.setSpacing(8)

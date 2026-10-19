@@ -255,11 +255,12 @@ class GogApi:
     # ------------------------------------------------------------- store
     def catalog(self, query: str = "", page: int = 1, order: str = "desc:trending", limit: int = 48,
                 linux_only: bool = False, discounted: bool = False, country: str = "US",
-                currency: str = "USD", product_ids: list[str] | None = None) -> dict:
+                currency: str = "USD", product_ids: list[str] | None = None,
+                product_types: str = "in:game,pack") -> dict:
         params: dict[str, Any] = {
             "limit": limit,
             "order": order,
-            "productType": "in:game,pack",
+            "productType": product_types,
             "page": page,
             "countryCode": country,
             "locale": "en-US",

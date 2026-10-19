@@ -52,10 +52,8 @@ class SectionHeader(QWidget):
         y = self.height() - 9
         x0 = NODE_X + self.indent
         _sparkle(p, QPointF(x0, y - 3.5), 4.2, LAVENDER)
-        f = QFont(self.font())
-        f.setPointSizeF(7.2)
-        f.setWeight(QFont.Weight.Bold)
-        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2.6)
+        f = theme.font("display", 7.6)
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2.4)
         p.setFont(f)
         p.setPen(QColor(141, 134, 186))
         p.drawText(QPointF(x0 + 10, y), self._text)
@@ -107,10 +105,9 @@ class BrandMark(QWidget):
         p.drawArc(QRectF(-19, -6, 38, 12), 180 * 16, 180 * 16)
         p.restore()
         _sparkle(p, QPointF(52, 15), 3, QColor(255, 255, 255, 220))
-        f = QFont(self.font())
-        f.setPointSizeF(15.5)
+        f = theme.font("display", 15)
         f.setWeight(QFont.Weight.Black)
-        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 4.5)
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 3.5)
         path = QPainterPath()
         path.addText(QPointF(62, 33), f, "NEBULA")
         g = QLinearGradient(62, 16, 200, 34)
@@ -118,7 +115,7 @@ class BrandMark(QWidget):
         g.setColorAt(0.55, QColor(206, 188, 255))
         g.setColorAt(1, QColor(126, 206, 255))
         p.fillPath(path, g)
-        f.setPointSizeF(6.8)
+        f = theme.font("sidebar", 6.4)
         f.setWeight(QFont.Weight.Bold)
         f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 3.2)
         p.setFont(f)
@@ -130,10 +127,12 @@ class OrbitPanel(QWidget):
     """Holds the sidebar items and bends them along an orbit: each item hangs off a node on a faint curved
     line, so the list reads as a constellation instead of a straight column."""
 
-    BULGE = 24  # how far the middle of the orbit swings out
+    BULGE = 26  # how far the middle of the orbit swings out
+    WOBBLE = 7  # how far single items drift off it, so the column never lines up
 
-    def _offset(self, y: float) -> int:
-        return int(round(self.BULGE * math.sin(math.pi * min(1.0, max(0.0, y / max(1, self.height()))))))
+    def _offset(self, y: float) -> float:
+        t = min(1.0, max(0.0, y / max(1, self.height())))
+        return self.BULGE * math.sin(math.pi * t) + self.WOBBLE * math.sin(y / 23.0) * math.sin(y / 61.0 + 1.3)
 
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)
@@ -142,7 +141,7 @@ class OrbitPanel(QWidget):
     def arrange(self) -> None:
         for w in self.findChildren(QWidget):
             if isinstance(w, (SidebarButton, SectionHeader)) and w.isVisible():
-                indent = self._offset(w.geometry().center().y())
+                indent = int(round(self._offset(w.geometry().center().y())))
                 if indent != w.indent:
                     w.indent = indent
                     if isinstance(w, SidebarButton):
@@ -158,7 +157,7 @@ class OrbitPanel(QWidget):
             return
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pts = [QPointF(NODE_X + self._offset(y) + 0.5, y) for y, _w in nodes]
+        pts = [QPointF(NODE_X + w.indent + 0.5, y) for y, w in nodes]
         path = QPainterPath(pts[0])
         for a, b in zip(pts, pts[1:]):  # smooth through the nodes
             mid = (a.y() + b.y()) / 2

@@ -79,6 +79,19 @@ class SettingsPage(Page):
             c.setToolTip(tip)
         return c
 
+    def font_combo(self, key: str) -> QComboBox:
+        """Any installed font (the bundled Audiowide and Orbitron included), or the system font."""
+        from PySide6.QtGui import QFontDatabase
+
+        c = QComboBox()
+        c.setMaximumWidth(260)
+        c.addItem("System default", "")
+        for fam in QFontDatabase.families():
+            c.addItem(fam, fam)
+        c.setCurrentIndex(max(0, c.findData(self.st.get(key) or "")))
+        c.currentIndexChanged.connect(lambda _i: self.st.set(key, c.currentData()))
+        return c
+
     def spin(self, key: str, lo: int, hi: int, suffix: str = "", special: str = "") -> QSpinBox:
         s = QSpinBox()
         s.setMaximumWidth(180)
@@ -129,6 +142,9 @@ class SettingsPage(Page):
         fa.addRow(self.check("appearance.starfield", "Starry sky background"))
         fa.addRow(self.check("appearance.animate_stars", "Animate the stars (twinkling and shooting stars)"))
         fa.addRow(label("The animation pauses automatically while a game is running.", "Faint"))
+        fa.addRow("Interface font", self.font_combo("appearance.font_ui"))
+        fa.addRow("Titles && logo font", self.font_combo("appearance.font_display"))
+        fa.addRow("Sidebar font", self.font_combo("appearance.font_sidebar"))
         lay.addWidget(ga)
         g, f = self.group("Application")
         f.addRow(self.check("general.show_tray", "Show icon in the system tray"))

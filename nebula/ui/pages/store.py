@@ -274,9 +274,43 @@ class StorePage(Page):
         lay.addWidget(self.status)
         self.grid = StoreGrid(self)
         self.grid.open_item.connect(lambda it: self.win.navigate("product", it))
+        self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.grid.customContextMenuRequested.connect(self._item_menu)
         self.grid.verticalScrollBar().valueChanged.connect(self._maybe_more)
         lay.addWidget(self.grid, 1)
         self._loaded_once = False
+
+    def _item_menu(self, pos) -> None:
+        idx = self.grid.indexAt(pos)
+        it = idx.data(ITEM_ROLE) if idx.isValid() else None
+        if not it:
+            return
+        from PySide6.QtWidgets import QMenu
+
+        pid = str(it.get("id"))
+        m = QMenu(self)
+        m.addAction(icons.icon("store"), "Open", lambda: self.win.navigate("product", it))
+        if self.gog.connected() and pid not in self.owned:
+            if pid in self.wishlist:
+                m.addAction(icons.icon("heart"), "Remove from wishlist", lambda: self._set_wish(it, False))
+            else:
+                m.addAction(icons.icon("heart"), "Add to wishlist", lambda: self._set_wish(it, True))
+        m.exec(self.grid.viewport().mapToGlobal(pos))
+
+    def _set_wish(self, it: dict, want: bool) -> None:
+        pid = str(it.get("id"))
+
+        def done(_r):
+            (self.wishlist.add if want else self.wishlist.discard)(pid)
+            if self.wishlist_mode and not want:
+                self.grid.model_.set_items([x for x in self.grid.model_.items if str(x.get("id")) != pid])
+                if not self.grid.model_.items:
+                    self.status.setText("Your wishlist is empty.")
+            self.grid.viewport().update()
+            self.win.toast("Wishlist", f"{'Added' if want else 'Removed'} {it.get('title', '')}")
+
+        tasks.run_async(self.gog.set_wishlisted, pid, want, on_done=done,
+                        on_error=lambda e: self.win.toast("Wishlist", str(e), "error"))
 
     def on_show(self, arg=None) -> None:
         if isinstance(arg, str) and arg:
@@ -306,10 +340,11 @@ class StorePage(Page):
                 if not self.gog.connected():
                     return owned, wish, {"products": [], "pages": 1, "_login": True}
                 ids = sorted(wish)
-                if not ids:
-                    return owned, wish, {"products": [], "pages": 1}
-                data = self.gog.catalog(product_ids=ids, limit=100, order="desc:trending")
-                return owned, wish, data
+                products = []
+                for i in range(0, len(ids), 48):  # the catalog serves at most 48 products per request
+                    products += self.gog.catalog(product_ids=ids[i:i + 48], limit=48, order="desc:trending",
+                                                 product_types="in:game,pack,dlc,extras").get("products", [])
+                return owned, wish, {"products": products, "pages": 1}
             data = self.gog.catalog(query=self.search.text().strip(), page=1, order=self.order.currentData(),
                                     linux_only=self.linux.isChecked(), discounted=self.sale.isChecked())
             return owned, wish, data

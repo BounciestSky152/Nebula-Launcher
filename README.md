@@ -309,6 +309,8 @@ nebula/
 
 ## Credits
 
+The bundled fonts are [Audiowide](https://fonts.google.com/specimen/Audiowide) and [Orbitron](https://fonts.google.com/specimen/Orbitron), both under the SIL Open Font License (licence texts in `nebula/assets/fonts/`). Settings › General › Appearance lets you swap them, or the interface font, for any installed font.
+
 Protocol knowledge comes from [heroic-gogdl](https://github.com/Heroic-Games-Launcher/heroic-gogdl),
 [minigalaxy](https://github.com/sharkwouter/minigalaxy), the community
 [GOG API documentation](https://gogapidocs.readthedocs.io/),

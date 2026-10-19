@@ -483,6 +483,46 @@ QSplitter::handle {{ background: {BORDER}; }}
 """
 
 
+# fonts picked in Settings › General › Appearance ("" = system font); Audiowide and Orbitron ship with Nebula
+FONTS = {"ui": "", "display": "Audiowide", "sidebar": "Orbitron"}
+_base_font: QFont | None = None
+_fonts_loaded = False
+
+
+def load_fonts() -> None:
+    global _fonts_loaded
+    if _fonts_loaded:
+        return
+    _fonts_loaded = True
+    from pathlib import Path
+
+    from PySide6.QtGui import QFontDatabase
+
+    for f in sorted((Path(__file__).resolve().parent.parent / "assets" / "fonts").glob("*.ttf")):
+        QFontDatabase.addApplicationFont(str(f))
+
+
+def font(role: str, point_size: float = 10) -> QFont:
+    """The configured font for ``role`` (ui | display | sidebar)."""
+    f = QFont(_base_font) if _base_font is not None else QFont()
+    if FONTS.get(role):
+        f.setFamily(FONTS[role])
+    f.setPointSizeF(point_size)
+    return f
+
+
+def set_fonts(app: QApplication, ui: str = "", display: str = "", sidebar: str = "") -> None:
+    FONTS.update(ui=ui or "", display=display or "", sidebar=sidebar or "")
+    load_fonts()
+    app.setFont(font("ui", _base_font.pointSizeF() if _base_font is not None else 10))
+    rules = []
+    if FONTS["display"]:
+        rules.append(f'#PageTitle {{ font-family: "{FONTS["display"]}"; font-weight: 400; }}')
+    if FONTS["sidebar"]:
+        rules.append(f'QPushButton#SidebarButton QLabel {{ font-family: "{FONTS["sidebar"]}"; font-size: 9pt; }}')
+    app.setStyleSheet(QSS + "\n".join(rules))
+
+
 def apply(app: QApplication) -> None:
     app.setStyle("Fusion")
     pal = QPalette()
@@ -504,5 +544,6 @@ def apply(app: QApplication) -> None:
     if f.pointSize() < 10:
         f.setPointSize(10)
     f.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
-    app.setFont(f)
-    app.setStyleSheet(QSS)
+    global _base_font
+    _base_font = QFont(f)
+    set_fonts(app, FONTS["ui"], FONTS["display"], FONTS["sidebar"])

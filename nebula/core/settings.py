@@ -79,7 +79,10 @@ DEFAULTS: dict[str, Any] = {
     "updates.interval_minutes": 30,
     "updates.repo": "BounciestSky152/Nebula-Launcher",
     "updates.branch": "main",
-    "updates.github_token": "",  # only needed for a private repository
+    "updates.github_token": "",
+    "appearance.font_ui": "",  # "" = the system font
+    "appearance.font_display": "Audiowide",  # logo, section headers, page titles
+    "appearance.font_sidebar": "Orbitron",  # only needed for a private repository
     # Appearance
     "appearance.starfield": True,
     "appearance.animate_stars": True,

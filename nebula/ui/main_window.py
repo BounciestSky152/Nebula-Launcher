@@ -8,10 +8,10 @@ import subprocess
 from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QMenu, QStackedWidget, QSystemTrayIcon, \
-    QVBoxLayout
+    QVBoxLayout, QWidget
 
 from nebula import APP_NAME
-from nebula.ui import icons
+from nebula.ui import icons, theme
 from nebula.ui.controller import UiController
 from nebula.ui.friends import FriendsPanel
 from nebula.ui.pages.downloads import DownloadsPage
@@ -131,6 +131,12 @@ class MainWindow(QMainWindow):
 
     def apply_appearance(self) -> None:
         st = self.s.settings
+        fonts = (st.get("appearance.font_ui") or "", st.get("appearance.font_display") or "",
+                 st.get("appearance.font_sidebar") or "")
+        if fonts != (theme.FONTS["ui"], theme.FONTS["display"], theme.FONTS["sidebar"]):
+            theme.set_fonts(QApplication.instance(), *fonts)
+            for w in self.sidebar.findChildren(QWidget) + [self.sidebar]:
+                w.update()
         self.starfield.set_stars(bool(st.get("appearance.starfield")))
         running = bool(self.s.launcher.running)
         self.starfield.set_animated(bool(st.get("appearance.animate_stars")) and not running)
