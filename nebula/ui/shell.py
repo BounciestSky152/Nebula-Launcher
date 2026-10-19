@@ -684,7 +684,6 @@ class TopBar(QWidget):
         self.friends.setToolTip("Friends")
         self.friends.setCursor(Qt.CursorShape.PointingHandCursor)
         self.friends.clicked.connect(window.toggle_friends)
-        lay.addWidget(self.friends)
         lay.addSpacing(6)
         # GOG identity: avatar menu when signed in, otherwise a sign-in button
         self.sign_in = QPushButton("Sign in with GOG")
@@ -708,6 +707,7 @@ class TopBar(QWidget):
         al.addWidget(self.avatar_name)
         self.avatar_btn.clicked.connect(self._profile_menu)
         lay.addWidget(self.avatar_btn)
+        lay.addWidget(self.friends)  # right of the user, like Galaxy
         self.settings_btn = icon_button("settings", "Settings (Ctrl+,)", size=19)
         self.settings_btn.clicked.connect(lambda: self.win.navigate("settings"))
         # sync, downloads and settings live in the sidebar's tool row (Sidebar.dock_tools)

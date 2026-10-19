@@ -247,3 +247,21 @@ def test_gog_wishlist_exact_items_and_privacy(services, monkeypatch):
         raise RuntimeError("HTTP 403")
     monkeypatch.setattr(gog.api, "wishlist", private)
     assert gog.wishlist(refresh=True) == set() and not gog.wishlist_available()
+
+
+def test_gog_friends_endpoint_fallbacks(services, monkeypatch):
+    from nebula.integrations.gog.api import ApiError
+
+    api = services.integrations["gog"].api
+    monkeypatch.setattr(type(api.auth), "user_id", property(lambda self: ""))
+    monkeypatch.setattr(api, "user_data", lambda: {"galaxyUserId": "42"})
+    calls = []
+
+    def fake_json(url, auth=True, **kw):
+        calls.append(url)
+        if "chat.gog.com" in url:
+            raise ApiError("HTTP 404", status=404)
+        return {"items": [{"user": {"id": "7", "username": "pal"}}]}
+    monkeypatch.setattr(api, "json", fake_json)
+    assert api.friends() == [{"user": {"id": "7", "username": "pal"}}]
+    assert calls[0].endswith("/users/42/friends") and "users.gog.com" in calls[1]

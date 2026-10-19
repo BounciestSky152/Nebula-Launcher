@@ -62,6 +62,7 @@ class FriendsService(QObject):
         self.s = services
         self.friends: list[Friend] = []
         self.loading = False
+        self.error = ""  # why the last refresh failed, shown in the friends panel
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self._apply_interval()
@@ -82,9 +83,12 @@ class FriendsService(QObject):
         if gog is None or not (gog.supports(FRIENDS) and gog.enabled() and gog.connected()):
             return []
         try:
-            return list(gog.friends())
+            friends = list(gog.friends())
+            self.error = ""
+            return friends
         except Exception as exc:  # noqa: BLE001
-            log.info("GOG friends failed: %s", exc)
+            log.warning("GOG friends failed: %s", exc)
+            self.error = f"Couldn't load your GOG friends ({exc})."
             return []
 
     def _done(self, friends: list[Friend]) -> None:

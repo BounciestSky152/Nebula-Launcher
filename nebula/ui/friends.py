@@ -99,10 +99,13 @@ class FriendsPanel(QWidget):
         if q:
             friends = [f for f in friends if q in f.name.lower()]
         online = self.s.friends.online_count()
-        self.title.setText(f"Friends  •  {online} online" if self.s.friends.friends else "Friends")
+        n = len(self.s.friends.friends)
+        self.title.setText((f"Friends  •  {online} online" if online else f"Friends  •  {n}") if n else "Friends")
         if not self.s.friends.friends:
-            self.list.addWidget(label("Sign in to GOG or add a Steam Web API key (Settings › Integrations) to "
-                                      "see your friends here.", "Faint", wrap=True))
+            gog = self.s.integrations.get("gog")
+            text = (self.s.friends.error or "No GOG friends yet.") if gog and gog.connected() \
+                else "Sign in with GOG to see your friends here."
+            self.list.addWidget(label(text, "Faint", wrap=True))
         groups = [("Playing", [f for f in friends if f.status == "playing"]),
                   ("Online", [f for f in friends if f.status in ("online", "away", "busy")]),
                   ("Friends", [f for f in friends if f.status == "unknown"]),

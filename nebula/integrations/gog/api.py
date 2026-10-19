@@ -247,10 +247,23 @@ class GogApi:
             pass
 
     def friends(self) -> list[dict]:
-        data = self.json(f"{CHAT}/users/{self.auth.user_id}/friends")
-        if isinstance(data, dict):
-            return data.get("items", []) or []
-        return data or []
+        uid = self.auth.user_id
+        if not uid:  # older sign-ins may not have stored it
+            data = self.user_data() or {}
+            uid = str(data.get("galaxyUserId") or data.get("userId") or "")
+        if not uid:
+            raise ApiError("GOG didn't return your user id")
+        error: ApiError | None = None
+        for url in (f"{CHAT}/users/{uid}/friends", f"{USERS}/users/{uid}/friends"):
+            try:
+                data = self.json(url)
+            except ApiError as exc:
+                error = exc
+                continue
+            if isinstance(data, dict):
+                data = data.get("items") or data.get("friends") or (data.get("_embedded") or {}).get("items") or []
+            return list(data or [])
+        raise error
 
     # ------------------------------------------------------------- store
     def catalog(self, query: str = "", page: int = 1, order: str = "desc:trending", limit: int = 48,
