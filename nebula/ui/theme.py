@@ -74,6 +74,7 @@ QToolTip {{
     letter-spacing: 2px;
     padding: 16px 20px 5px 20px;
 }}
+QPushButton#SidebarBrand {{ background: transparent; border: none; }}
 QPushButton#SidebarButton {{
     text-align: left;
     padding: 7px 14px 7px 16px;
@@ -82,18 +83,6 @@ QPushButton#SidebarButton {{
     margin: 0 8px;
     color: {TEXT_DIM};
     background: transparent;
-}}
-QPushButton#SidebarButton:hover {{
-    background: rgba(255, 255, 255, 0.05);
-    color: {TEXT};
-}}
-QPushButton#SidebarButton:checked {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                stop:0 rgba(140, 98, 212, 0.42), stop:1 rgba(140, 98, 212, 0.02));
-    border-left: 2px solid #b79cff;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-    color: {TEXT};
 }}
 QPushButton#SidebarAdd {{
     background: rgba(255, 255, 255, 0.04);

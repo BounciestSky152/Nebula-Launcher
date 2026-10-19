@@ -4,13 +4,122 @@ from __future__ import annotations
 import random
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, QStringListModel, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap, QRadialGradient
+from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap,
+                           QRadialGradient)
 from PySide6.QtWidgets import (QButtonGroup, QCompleter, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton,
                                QScrollArea, QVBoxLayout, QWidget)
 
 from nebula.core.utils import xdg_open
 from nebula.ui import icons, theme
 from nebula.ui.widgets.common import Avatar, Spinner, icon_button, label
+
+
+LAVENDER = QColor(183, 156, 255)
+ITEM_TEXT, ITEM_TEXT_ON = "#b4aed6", "#ffffff"
+ITEM_ICON, ITEM_ICON_ON = "#8f88bd", "#e2d6ff"
+
+
+def _sparkle(p: QPainter, c: QPointF, r: float, color: QColor) -> None:
+    """A four-pointed star."""
+    path = QPainterPath()
+    path.moveTo(c.x(), c.y() - r)
+    for dx, dy in ((0.22, -0.22), (1, 0), (0.22, 0.22), (0, 1), (-0.22, 0.22), (-1, 0), (-0.22, -0.22), (0, -1)):
+        path.lineTo(c.x() + dx * r, c.y() + dy * r)
+    p.fillPath(path, color)
+
+
+class SectionHeader(QWidget):
+    """Sidebar section title, HUD style: a sparkle, wide-tracked caps and a line fading into space."""
+
+    def __init__(self, text: str):
+        super().__init__()
+        self._text = text.upper()
+        self.setFixedHeight(30)
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        self._text = text.upper()
+        self.update()
+
+    def text(self) -> str:
+        return self._text
+
+    def paintEvent(self, _e):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        y = self.height() - 9
+        _sparkle(p, QPointF(21, y - 3.5), 4, LAVENDER)
+        f = QFont(self.font())
+        f.setPointSizeF(7.2)
+        f.setWeight(QFont.Weight.Bold)
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2.6)
+        p.setFont(f)
+        p.setPen(QColor(141, 134, 186))
+        p.drawText(QPointF(31, y), self._text)
+        x = 31 + p.fontMetrics().horizontalAdvance(self._text) + 8
+        line = QLinearGradient(x, 0, self.width() - 14, 0)
+        line.setColorAt(0, QColor(183, 156, 255, 90))
+        line.setColorAt(1, QColor(183, 156, 255, 0))
+        p.fillRect(QRectF(x, y - 3.5, max(0, self.width() - 14 - x), 1), line)
+
+
+class BrandMark(QWidget):
+    """The sidebar logo: a ringed planet and NEBULA in starlight lettering."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFixedHeight(64)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def paintEvent(self, _e):  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        c = QPointF(34, 32)
+        halo = QRadialGradient(c, 26)
+        halo.setColorAt(0, QColor(140, 100, 255, 70))
+        halo.setColorAt(1, QColor(140, 100, 255, 0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(halo)
+        p.drawEllipse(c, 26, 26)
+        ring = QPen(QColor(205, 190, 255, 170), 1.6)
+        p.save()  # back half of the ring, behind the planet
+        p.translate(c)
+        p.rotate(-22)
+        p.setPen(ring)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(-19, -6, 38, 12), 0, 180 * 16)
+        p.restore()
+        body = QLinearGradient(c.x() - 10, c.y() - 10, c.x() + 10, c.y() + 10)
+        body.setColorAt(0, QColor(196, 168, 255))
+        body.setColorAt(0.55, QColor(122, 82, 214))
+        body.setColorAt(1, QColor(46, 70, 160))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(body)
+        p.drawEllipse(c, 10.5, 10.5)
+        p.save()  # front half of the ring
+        p.translate(c)
+        p.rotate(-22)
+        p.setPen(ring)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(-19, -6, 38, 12), 180 * 16, 180 * 16)
+        p.restore()
+        _sparkle(p, QPointF(52, 15), 3, QColor(255, 255, 255, 220))
+        f = QFont(self.font())
+        f.setPointSizeF(15.5)
+        f.setWeight(QFont.Weight.Black)
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 4.5)
+        path = QPainterPath()
+        path.addText(QPointF(62, 33), f, "NEBULA")
+        g = QLinearGradient(62, 16, 200, 34)
+        g.setColorAt(0, QColor(255, 255, 255))
+        g.setColorAt(0.55, QColor(206, 188, 255))
+        g.setColorAt(1, QColor(126, 206, 255))
+        p.fillPath(path, g)
+        f.setPointSizeF(6.8)
+        f.setWeight(QFont.Weight.Bold)
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 3.2)
+        p.setFont(f)
+        p.setPen(QColor(141, 134, 186))
+        p.drawText(QPointF(63, 47), "GOG LAUNCHER")
 
 
 class SidebarButton(QPushButton):
@@ -44,11 +153,54 @@ class SidebarButton(QPushButton):
         self._paint_icon()
 
     def _paint_icon(self) -> None:
+        on = self.isChecked()
         if self._pixmap is not None:
             self.ic.setPixmap(self._pixmap)
         elif self._icon_name:
-            self.ic.setPixmap(icons.pixmap(self._icon_name, 18, theme.TEXT if self.isChecked() else theme.TEXT_DIM))
-        self.text_lbl.setStyleSheet(f"background: transparent; color: {theme.TEXT if self.isChecked() else theme.TEXT_DIM};")
+            self.ic.setPixmap(icons.pixmap(self._icon_name, 18, ITEM_ICON_ON if on else ITEM_ICON))
+        self.text_lbl.setStyleSheet(f"background: transparent; color: {ITEM_TEXT_ON if on else ITEM_TEXT}; "
+                                    f"font-weight: {600 if on else 500};")
+
+    def enterEvent(self, e):  # noqa: N802
+        super().enterEvent(e)
+        self.update()
+
+    def leaveEvent(self, e):  # noqa: N802
+        super().leaveEvent(e)
+        self.update()
+
+    def paintEvent(self, _e):  # noqa: N802
+        on, hover = self.isChecked(), self.underMouse()
+        if not (on or hover):
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect()).adjusted(10.5, 2.5, -10.5, -2.5)
+        path = QPainterPath()
+        path.addRoundedRect(r, r.height() / 2, r.height() / 2)
+        if not on:
+            p.fillPath(path, QColor(255, 255, 255, 12))
+            p.setPen(QPen(QColor(255, 255, 255, 18), 1))
+            p.drawPath(path)
+            return
+        fill = QLinearGradient(r.left(), 0, r.right(), 0)
+        fill.setColorAt(0, QColor(124, 92, 255, 115))
+        fill.setColorAt(0.65, QColor(72, 110, 255, 38))
+        fill.setColorAt(1, QColor(72, 160, 255, 6))
+        p.fillPath(path, fill)
+        edge = QLinearGradient(r.left(), 0, r.right(), 0)
+        edge.setColorAt(0, QColor(205, 185, 255, 170))
+        edge.setColorAt(1, QColor(205, 185, 255, 0))
+        p.setPen(QPen(QBrush(edge), 1))
+        p.drawPath(path)
+        star = QPointF(5, r.center().y())  # a docked star beside the capsule
+        glow = QRadialGradient(star, 7)
+        glow.setColorAt(0, QColor(210, 190, 255, 200))
+        glow.setColorAt(1, QColor(210, 190, 255, 0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(glow)
+        p.drawEllipse(star, 7, 7)
+        _sparkle(p, star, 3.2, QColor(255, 255, 255))
 
     def set_count(self, n) -> None:
         self.count.setText(str(n) if n else "")
@@ -89,23 +241,13 @@ class Sidebar(QWidget):
         outer.setSpacing(0)
         # brand header
         brand = QPushButton()
-        brand.setObjectName("SidebarButton")
+        brand.setObjectName("SidebarBrand")
         brand.setCursor(Qt.CursorShape.PointingHandCursor)
         brand.setMinimumHeight(66)
         brand.setToolTip("Home")
         bl = QHBoxLayout(brand)
-        bl.setContentsMargins(16, 10, 10, 8)
-        bl.setSpacing(10)
-        logo = QLabel()
-        logo.setPixmap(icons.app_icon().pixmap(34, 34))
-        bl.addWidget(logo)
-        col = QVBoxLayout()
-        col.setSpacing(0)
-        col.addWidget(label("NEBULA", "Brand"))
-        col.addWidget(label("FOR GOG", "BrandSub"))
-        bl.addLayout(col, 1)
-        for w in (logo,):
-            w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        bl.setContentsMargins(0, 2, 0, 0)
+        bl.addWidget(BrandMark())
         brand.clicked.connect(lambda: self.win.navigate("home"))
         outer.addWidget(brand)
         area = QScrollArea()
@@ -188,8 +330,9 @@ class Sidebar(QWidget):
         p.fillRect(QRectF(w - 1, 0, 1, h), edge)
         p.end()
         return pm
-    def _section(self, text: str) -> QLabel:
-        lb = label(text.upper(), "SidebarSection")
+
+    def _section(self, text: str) -> SectionHeader:
+        lb = SectionHeader(text)
         self.lay.addWidget(lb)
         return lb
 
@@ -218,7 +361,7 @@ class Sidebar(QWidget):
         for integ in self.s.integrations.values():
             if integ.id != "gog":
                 self._add(f"library:source:{integ.id}", integ.name, pixmap=icons.badge(integ.letter, integ.color, 18))
-        self.views_header = label("VIEWS", "SidebarSection")
+        self.views_header = SectionHeader("Views")
         self.lay.addWidget(self.views_header)
         self.views_box = QVBoxLayout()
         self.views_box.setSpacing(2)
