@@ -214,7 +214,7 @@ class SidebarButton(QPushButton):
         elif self._icon_name:
             self.ic.setPixmap(icons.pixmap(self._icon_name, 18, ITEM_ICON_ON if on else ITEM_ICON))
         self.text_lbl.setStyleSheet(f"background: transparent; color: {ITEM_TEXT_ON if on else ITEM_TEXT}; "
-                                    f"font-weight: {600 if on else 500};")
+                                    f"font-weight: {800 if on else 700};")
 
     def enterEvent(self, e):  # noqa: N802
         super().enterEvent(e)
