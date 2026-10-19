@@ -78,6 +78,7 @@ class HandheldPage(Page):
             head_lbl = label(text.upper(), "SidebarSection")
             row = CoverRow(services, 170)
             row.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            row.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # the focus scrolls it
             row.installEventFilter(self)
             row.selectionModel().currentChanged.connect(lambda cur, _p: self._show(cur))
             row.play_entry.connect(ctl.primary_action)

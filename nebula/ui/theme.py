@@ -517,7 +517,6 @@ HANDHELD = False  # fullscreen, bigger text and targets, gamepad navigation
 HANDHELD_QSS = """
 QPushButton#SidebarButton { min-height: 46px; }
 QPushButton:focus { border: 2px solid #b79cff; }
-QListView:focus, QTreeView:focus { border: 1px solid rgba(183, 156, 255, 0.6); }
 """
 MODE = "nebula"  # "nebula" (space-styled sidebar, bundled fonts) | "classic" (the original look)
 CLASSIC_QSS = """
