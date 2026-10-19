@@ -6,6 +6,11 @@ get to a dedicated GOG launcher for the near foreseeable future. If you are inte
 place for a future project feel free to fork it.
 
 
+#Installation
+
+/scripts/install.sh
+
+
 Nebula is a GOG launcher first. Sign in with GOG and your GOG library, the GOG store, your wishlist, cloud saves,
 achievements and GOG friends sit at the centre of the app, the way they do in GOG Galaxy 2.0. Your **Steam**,
 **Epic Games** (through Legendary/Heroic), **Lutris** and hand-added games join the same library alongside them.
