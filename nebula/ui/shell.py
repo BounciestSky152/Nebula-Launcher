@@ -16,6 +16,7 @@ from nebula.ui.widgets.common import Avatar, Spinner, icon_button, label
 
 
 LAVENDER = QColor(183, 156, 255)
+STATS_ENABLED = False  # the statistics page is switched off for now
 NODE_X = 12  # x of the orbit line the sidebar items hang on
 ITEM_TEXT, ITEM_TEXT_ON = "#b4aed6", "#ffffff"
 ITEM_ICON, ITEM_ICON_ON = "#8f88bd", "#e2d6ff"
@@ -492,7 +493,8 @@ class Sidebar(QWidget):
         self._add("library:hidden", "Hidden games", "eye-off")
         self._section("Activity")
         self._add("downloads", "Downloads", "download")
-        self._add("stats", "Statistics", "chart")
+        if STATS_ENABLED:
+            self._add("stats", "Statistics", "chart")
         self.lay.addStretch(1)
         self.rebuild_views()
 
