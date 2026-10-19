@@ -2,7 +2,8 @@
 
 First off, yes this was vibe coded and no this is not associated with the old nebula project from years ago. This is something
 I was going to keep private, but am forced to make public in order for certain features to work. This is the closest we will probably
-get to a dedicated GOG launcher for the near foreseeable future.
+get to a dedicated GOG launcher for the near foreseeable future. If you are interested in this project and want to use this is a starting
+place feel free to fork it.
 
 
 Nebula is a GOG launcher first. Sign in with GOG and your GOG library, the GOG store, your wishlist, cloud saves,
