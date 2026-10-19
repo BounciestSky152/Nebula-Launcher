@@ -513,6 +513,12 @@ def load_fonts() -> None:
         QFontDatabase.addApplicationFont(str(f))
 
 
+HANDHELD = False  # fullscreen, bigger text and targets, gamepad navigation
+HANDHELD_QSS = """
+QPushButton#SidebarButton { min-height: 46px; }
+QPushButton:focus { border: 2px solid #b79cff; }
+QListView:focus, QTreeView:focus { border: 1px solid rgba(183, 156, 255, 0.6); }
+"""
 MODE = "nebula"  # "nebula" (space-styled sidebar, bundled fonts) | "classic" (the original look)
 CLASSIC_QSS = """
 #Sidebar { background: rgba(8, 7, 18, 0.72); border-right: 1px solid rgba(160, 140, 255, 0.14); }
@@ -541,8 +547,11 @@ def set_fonts(app: QApplication, ui: str = "", display: str = "", sidebar: str =
     MODE = mode or MODE
     FONTS.update(ui=ui or "", display=display or "", sidebar=sidebar or "")
     load_fonts()
-    app.setFont(font("ui", _base_font.pointSizeF() if _base_font is not None else 10))
+    size = _base_font.pointSizeF() if _base_font is not None else 10
+    app.setFont(font("ui", size + 3 if HANDHELD else size))
     rules = [CLASSIC_QSS] if classic() else []
+    if HANDHELD:
+        rules.append(HANDHELD_QSS)
     if FONTS["display"] and not classic():
         rules.append(f'#PageTitle {{ font-family: "{FONTS["display"]}"; font-weight: 400; }}')
     if FONTS["sidebar"] and not classic():

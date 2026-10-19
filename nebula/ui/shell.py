@@ -264,7 +264,7 @@ class SidebarButton(QPushButton):
     def paintEvent(self, e):  # noqa: N802
         if theme.classic():
             return super().paintEvent(e)
-        on, hover = self.isChecked(), self.underMouse()
+        on, hover = self.isChecked(), self.underMouse() or (self.hasFocus() and theme.HANDHELD)
         if not (on or hover):
             return
         p = QPainter(self)

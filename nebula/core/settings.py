@@ -13,6 +13,8 @@ from nebula import paths
 DEFAULTS: dict[str, Any] = {
     # General
     "general.start_minimized": False,
+    "general.autostart": False,  # start Nebula when the user logs in
+    "handheld.mode": "auto",  # auto | on | off
     "general.close_to_tray": True,
     "general.show_tray": True,
     "general.notifications": True,

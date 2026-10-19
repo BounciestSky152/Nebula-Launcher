@@ -167,7 +167,10 @@ class SettingsPage(Page):
         g, f = self.group("Application")
         f.addRow(self.check("general.show_tray", "Show icon in the system tray"))
         f.addRow(self.check("general.close_to_tray", "Closing the window keeps Nebula running in the tray"))
+        f.addRow(self.check("general.autostart", "Start Nebula when I log in"))
         f.addRow(self.check("general.start_minimized", "Start minimised"))
+        f.addRow("Handheld mode", self.combo("handheld.mode", [
+            ("auto", "Automatic (Steam Deck, ROG Ally, Legion Go…)"), ("on", "On"), ("off", "Off")]))
         f.addRow(self.check("general.notifications", "Desktop notifications"))
         f.addRow("When a game starts", self.combo("general.launch_behaviour", [
             ("keep", "Keep Nebula open"), ("minimize", "Minimise Nebula"), ("hide", "Hide to tray")]))

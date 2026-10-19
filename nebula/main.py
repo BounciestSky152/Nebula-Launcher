@@ -142,6 +142,8 @@ def main(argv=None) -> int:
     if args.minimized or services.settings.get("general.start_minimized"):
         if window.tray is None or not window.tray.isVisible():
             window.showMinimized()
+    elif theme.HANDHELD:
+        window.showFullScreen()
     else:
         window.show()
     if args.launch:

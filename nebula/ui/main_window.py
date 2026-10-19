@@ -11,6 +11,8 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QMenu, QSt
     QVBoxLayout, QWidget
 
 from nebula import APP_NAME
+from nebula.core import autostart
+from nebula.ui import handheld as handheld_mod
 from nebula.ui import icons, theme
 from nebula.ui.controller import UiController
 from nebula.ui.friends import FriendsPanel
@@ -135,6 +137,12 @@ class MainWindow(QMainWindow):
         fonts = (st.get("appearance.font_ui") or "", st.get("appearance.font_display") or "",
                  st.get("appearance.font_sidebar") or "")
         mode = "classic" if st.get("appearance.theme") == "classic" else "nebula"
+        hh = st.get("handheld.mode") or "auto"
+        handheld = hh == "on" or (hh == "auto" and handheld_mod.detect())
+        if handheld != theme.HANDHELD:
+            theme.HANDHELD = handheld
+            theme.MODE = ""  # force the style sheet to be rebuilt below
+            self._set_handheld(handheld)
         self.starfield.set_classic(mode == "classic")
         if fonts != (theme.FONTS["ui"], theme.FONTS["display"], theme.FONTS["sidebar"]) or mode != theme.MODE:
             theme.set_fonts(QApplication.instance(), *fonts, mode=mode)
@@ -145,9 +153,27 @@ class MainWindow(QMainWindow):
         running = bool(self.s.launcher.running)
         self.starfield.set_animated(bool(st.get("appearance.animate_stars")) and not running)
 
-    def _setting_changed(self, key: str, _value) -> None:
-        if key.startswith("appearance."):
+    def _setting_changed(self, key: str, value) -> None:
+        if key.startswith("appearance.") or key == "handheld.mode":
             self.apply_appearance()
+        elif key == "general.autostart":
+            autostart.apply(bool(value))
+
+    def _set_handheld(self, on: bool) -> None:
+        if not hasattr(self, "_gamepad"):
+            self._gamepad = handheld_mod.Gamepad()
+            self._nav = handheld_mod.Navigation(self)
+        app = QApplication.instance()
+        if on:
+            self._gamepad.start()
+            app.installEventFilter(self._nav)
+            if self.isVisible():
+                self.showFullScreen()
+        else:
+            self._gamepad.stop()
+            app.removeEventFilter(self._nav)
+            if self.isFullScreen():
+                self.showNormal()
 
     def go_back(self) -> None:
         if self.hist_index > 0:
