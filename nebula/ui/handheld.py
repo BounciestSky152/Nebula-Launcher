@@ -6,7 +6,6 @@ import logging
 import os
 import struct
 import threading
-from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QKeyEvent
@@ -15,18 +14,6 @@ from PySide6.QtWidgets import QAbstractButton, QApplication
 from nebula.core import tasks
 
 log = logging.getLogger(__name__)
-
-# DMI product names of common handheld PCs
-HANDHELDS = {"jupiter", "galileo", "rc71l", "rc72la", "83e1", "83l3", "83n6", "g1617-01", "g1618-04"}
-
-
-def detect() -> bool:
-    try:
-        name = Path("/sys/devices/virtual/dmi/id/product_name").read_text().strip().lower()
-    except OSError:
-        return False
-    return name in HANDHELDS or name.startswith("rog ally")
-
 
 def send_key(key: int) -> None:
     target = QApplication.activePopupWidget() or QApplication.activeModalWidget() or QApplication.focusWidget() \
@@ -39,9 +26,9 @@ def send_key(key: int) -> None:
 
 class Gamepad:
     """Reads /dev/input/js* (Linux joystick API, no extra packages) and turns the pad into key presses:
-    D-pad / left stick = arrows, A = Enter, B = Escape (back)."""
+    D-pad / left stick = arrows, A = Enter, B = Escape (back), Y = F2 (details), Start = F10 (settings)."""
 
-    BUTTONS = {0: Qt.Key.Key_Return, 1: Qt.Key.Key_Escape}
+    BUTTONS = {0: Qt.Key.Key_Return, 1: Qt.Key.Key_Escape, 3: Qt.Key.Key_F2, 7: Qt.Key.Key_F10}
     AXES = {0: (Qt.Key.Key_Left, Qt.Key.Key_Right), 1: (Qt.Key.Key_Up, Qt.Key.Key_Down),
             6: (Qt.Key.Key_Left, Qt.Key.Key_Right), 7: (Qt.Key.Key_Up, Qt.Key.Key_Down)}
 
@@ -103,8 +90,12 @@ class Navigation(QObject):
         if e.type() != QEvent.Type.KeyPress:
             return False
         key = e.key()
+        if key == Qt.Key.Key_F10 and QApplication.activeModalWidget() is None:
+            self.win.navigate("settings")
+            return True
         if key == Qt.Key.Key_Escape and QApplication.activeModalWidget() is None \
-                and QApplication.activePopupWidget() is None and obj is QApplication.focusWidget():
+                and QApplication.activePopupWidget() is None and obj is QApplication.focusWidget() \
+                and self.win.stack.currentWidget() is not self.win.pages.get("handheld"):
             self.win.go_back()
             return True
         w = QApplication.focusWidget()

@@ -18,6 +18,7 @@ from nebula.ui.controller import UiController
 from nebula.ui.friends import FriendsPanel
 from nebula.ui.pages.downloads import DownloadsPage
 from nebula.ui.pages.game import GamePage
+from nebula.ui.pages.handheld import HandheldPage
 from nebula.ui.pages.home import HomePage
 from nebula.ui.pages.library import LibraryPage
 from nebula.ui.pages.settings import SettingsPage
@@ -82,6 +83,7 @@ class MainWindow(QMainWindow):
             "stats": StatsPage(services, self.ctl, self),
             "settings": SettingsPage(services, self.ctl, self),
             "welcome": WelcomePage(services, self.ctl, self),
+            "handheld": HandheldPage(services, self.ctl, self),
         }
         for p in self.pages.values():
             self.stack.addWidget(p)
@@ -114,7 +116,7 @@ class MainWindow(QMainWindow):
             if not self.history or self.history[-1] != (page, arg):
                 self.history.append((page, arg))
             self.hist_index = len(self.history) - 1
-        chrome = page != "welcome"
+        chrome = page not in ("welcome", "handheld")
         self.sidebar.setVisible(chrome)
         self.topbar.setVisible(chrome)
         self.friends.setVisible(chrome and bool(self.s.settings.get("window.friends_open")))
@@ -127,7 +129,9 @@ class MainWindow(QMainWindow):
     def start_page(self) -> None:
         """Galaxy-style start: ask to sign in with GOG first, otherwise open Home."""
         gog = self.s.integrations.get("gog")
-        if gog and not gog.connected() and not self.s.db.kv_get("ui.welcome_dismissed"):
+        if theme.HANDHELD:
+            self.navigate("handheld")
+        elif gog and not gog.connected() and not self.s.db.kv_get("ui.welcome_dismissed"):
             self.navigate("welcome", record=False)
         else:
             self.navigate("home")
@@ -137,8 +141,7 @@ class MainWindow(QMainWindow):
         fonts = (st.get("appearance.font_ui") or "", st.get("appearance.font_display") or "",
                  st.get("appearance.font_sidebar") or "")
         mode = "classic" if st.get("appearance.theme") == "classic" else "nebula"
-        hh = st.get("handheld.mode") or "auto"
-        handheld = hh == "on" or (hh == "auto" and handheld_mod.detect())
+        handheld = st.get("handheld.mode") == "on"
         if handheld != theme.HANDHELD:
             theme.HANDHELD = handheld
             theme.MODE = ""  # force the style sheet to be rebuilt below
@@ -169,11 +172,14 @@ class MainWindow(QMainWindow):
             app.installEventFilter(self._nav)
             if self.isVisible():
                 self.showFullScreen()
+                self.navigate("handheld")
         else:
             self._gamepad.stop()
             app.removeEventFilter(self._nav)
             if self.isFullScreen():
                 self.showNormal()
+            if self.stack.currentWidget() is self.pages.get("handheld"):
+                self.navigate("home")
 
     def go_back(self) -> None:
         if self.hist_index > 0:
