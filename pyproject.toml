@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nebula-launcher"
-version = "1.0.0"
+version = "1.1.0"
 description = "A unified game launcher for Linux inspired by GOG Galaxy 2.0, with Proton for Windows games"
 readme = "README.md"
 requires-python = ">=3.10"
