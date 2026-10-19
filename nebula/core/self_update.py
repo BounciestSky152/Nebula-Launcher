@@ -8,7 +8,7 @@ import time
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from nebula.core import tasks
-from nebula.updater import DEFAULT_BRANCH, DEFAULT_REPO, UpdateInfo, Updater
+from nebula.updater import DEFAULT_BRANCH, DEFAULT_REPO, UpdateInfo, Updater, find_token
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class SelfUpdateService(QObject):
         repo = self.settings.get("updates.repo") or DEFAULT_REPO
         branch = self.settings.get("updates.branch") or DEFAULT_BRANCH
         if self._updater is None or self._updater.repo != repo or self._updater.branch != branch:
-            self._updater = Updater(repo, branch)
+            self._updater = Updater(repo, branch, token=find_token(self.settings.get("updates.github_token") or ""))
         return self._updater
 
     def enabled(self) -> bool:
@@ -58,7 +58,7 @@ class SelfUpdateService(QObject):
     def _setting_changed(self, key: str, _value) -> None:
         if key == "updates.interval_minutes" and self.timer.isActive():
             self._arm_timer()
-        elif key in ("updates.repo", "updates.branch"):
+        elif key in ("updates.repo", "updates.branch", "updates.github_token"):
             self._updater = None
 
     def _arm_timer(self) -> None:

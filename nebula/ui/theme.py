@@ -13,19 +13,19 @@ BORDER = "#2b2b36"
 TEXT = "#e9e9f0"
 TEXT_DIM = "#a0a0b0"
 TEXT_FAINT = "#6c6c7c"
-ACCENT = "#8f5ef0"
-ACCENT_HOVER = "#a378ff"
-ACCENT_PRESSED = "#7647d6"
-ACCENT_SOFT = "#2c2142"
+ACCENT = "#7b4fc4"
+ACCENT_HOVER = "#8c62d4"
+ACCENT_PRESSED = "#6a40ad"
+ACCENT_SOFT = "#2a2335"
 SUCCESS = "#4fbf73"
 WARNING = "#e3a63b"
 DANGER = "#e25c5c"
 INFO = "#4aa3df"
 # translucent "glass" surfaces that let the starfield show through
-GLASS = "rgba(12, 10, 24, 0.55)"
-GLASS_DARK = "rgba(8, 7, 18, 0.72)"
-GLASS_CARD = "rgba(28, 26, 44, 0.72)"
-GLASS_BORDER = "rgba(160, 140, 255, 0.14)"
+GLASS = "rgba(16, 16, 20, 0.82)"
+GLASS_DARK = "rgba(13, 13, 17, 0.88)"
+GLASS_CARD = "rgba(26, 26, 32, 0.86)"
+GLASS_BORDER = "rgba(255, 255, 255, 0.07)"
 
 QSS = f"""
 * {{
@@ -112,7 +112,7 @@ QPushButton#SidebarButton:checked {{
 QPushButton#GogSignIn {{
     background: {ACCENT};
     border: none;
-    border-radius: 16px;
+    border-radius: 6px;
     color: white;
     font-weight: 700;
     padding: 6px 16px;
@@ -149,7 +149,7 @@ QPushButton#AvatarButton::menu-indicator {{ image: none; }}
 QLineEdit#SearchBox {{
     background: {SURFACE};
     border: 1px solid {BORDER};
-    border-radius: 16px;
+    border-radius: 6px;
     padding: 6px 12px 6px 32px;
     min-width: 260px;
 }}
@@ -247,7 +247,7 @@ QPushButton#IconButton::menu-indicator, QToolButton#IconButton::menu-indicator {
 QPushButton#Chip {{
     background: {SURFACE};
     border: 1px solid {BORDER};
-    border-radius: 12px;
+    border-radius: 6px;
     padding: 3px 10px;
     color: {TEXT_DIM};
     font-size: 9pt;
@@ -437,7 +437,7 @@ QMenu::icon {{ padding-left: 8px; }}
 #Card {{
     background: {GLASS_CARD};
     border: 1px solid {GLASS_BORDER};
-    border-radius: 10px;
+    border-radius: 6px;
 }}
 #PageTitle {{
     font-size: 20pt;

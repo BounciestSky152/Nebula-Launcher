@@ -47,6 +47,22 @@ PACKAGE = "nebula"
 DEPENDENCY_FILE = "pyproject.toml"
 
 
+def find_token(configured: str = "") -> str:
+    """A GitHub token for private repositories: the setting, then $NEBULA_GITHUB_TOKEN / $GITHUB_TOKEN /
+    $GH_TOKEN, then the GitHub CLI's login (``gh auth token``)."""
+    for value in (configured, os.environ.get("NEBULA_GITHUB_TOKEN"), os.environ.get("GITHUB_TOKEN"),
+                  os.environ.get("GH_TOKEN")):
+        if value and value.strip():
+            return value.strip()
+    if shutil.which("gh"):
+        try:
+            out = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=5)
+            return out.stdout.strip() if out.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return ""
+
+
 class UpdateError(Exception):
     pass
 
@@ -93,7 +109,8 @@ class UpdateInfo:
 class Updater:
     def __init__(self, repo: str = DEFAULT_REPO, branch: str = DEFAULT_BRANCH, state_path: Path | None = None,
                  package_dir: Path | None = None, session: requests.Session | None = None,
-                 api_base: str = API_BASE, codeload_base: str = CODELOAD_BASE, git_base: str = GIT_BASE):
+                 api_base: str = API_BASE, codeload_base: str = CODELOAD_BASE, git_base: str = GIT_BASE,
+                 token: str = ""):
         from nebula import paths
 
         self.repo = repo.strip().strip("/")
@@ -107,6 +124,9 @@ class Updater:
 
             session = new_session()
         self.session = session
+        self.token = token
+        if token:  # requests drops it on redirects to other hosts (e.g. the tarball download)
+            self.session.headers["Authorization"] = f"Bearer {token}"
         self._mode: str | None = None
         self.state = self._load_state()
 
@@ -188,7 +208,13 @@ class Updater:
 
     def _head_via_git_protocol(self) -> str:
         r = self.session.get(f"{self.git_base}/{self.repo}.git/info/refs", params={"service": "git-upload-pack"},
-                             timeout=20)
+                             timeout=20, auth=("x-access-token", self.token) if self.token else None)
+        if r.status_code in (401, 403, 404):
+            if self.token:
+                raise UpdateError(f"GitHub refused access to {self.repo} (HTTP {r.status_code}). "
+                                  "Check that the token can read this repository.")
+            raise UpdateError(f"GitHub can't find {self.repo} (HTTP {r.status_code}). If the repository is "
+                              "private, add a GitHub token in Settings › Updates or sign in with `gh auth login`.")
         if not r.ok:
             raise UpdateError(f"Could not reach {self.repo} (HTTP {r.status_code})")
         want = f"refs/heads/{self.branch}".encode()
@@ -316,8 +342,10 @@ class Updater:
             shutil.rmtree(target)
         target.mkdir(parents=True)
         archive = target / "source.tar.gz"
-        with self.session.get(f"{self.codeload_base}/{self.repo}/tar.gz/{info.remote_sha}", stream=True,
-                              timeout=(15, 120)) as r:
+        # private repositories need the API endpoint, which redirects to a signed codeload URL
+        url = (f"{self.api_base}/repos/{self.repo}/tarball/{info.remote_sha}" if self.token
+               else f"{self.codeload_base}/{self.repo}/tar.gz/{info.remote_sha}")
+        with self.session.get(url, stream=True, timeout=(15, 120)) as r:
             if not r.ok:
                 raise UpdateError(f"Download failed (HTTP {r.status_code})")
             total = int(r.headers.get("Content-Length") or 0)

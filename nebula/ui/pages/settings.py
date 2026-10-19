@@ -168,16 +168,6 @@ class SettingsPage(Page):
         from nebula import __version__
 
         w, lay = self._page()
-        intro = card()
-        il = QVBoxLayout(intro)
-        il.setContentsMargins(16, 14, 16, 14)
-        il.addWidget(label("Nebula keeps itself up to date", "SectionTitle"))
-        il.addWidget(label("New versions are pulled straight from GitHub. Only changes to the files the app actually "
-                           "runs (the nebula package and its dependency list) trigger an update \u2014 edits to the "
-                           "README, docs, screenshots or tests are ignored. Every downloaded file is verified "
-                           "against GitHub's hashes before it is installed, and Nebula never restarts while a game "
-                           "is running or a download is active.", "Subtle", wrap=True))
-        lay.addWidget(intro)
         g, f = self.group("Status")
         self.upd_version = label("", selectable=True)
         f.addRow("Version", self.upd_version)
@@ -193,16 +183,21 @@ class SettingsPage(Page):
         f.addRow("", r)
         lay.addWidget(g)
         g2, f2 = self.group("Automatic updates")
-        f2.addRow(self.check("updates.auto_check", "Check GitHub for new versions automatically"))
+        f2.addRow(self.check("updates.auto_check", "Check for new versions"))
         f2.addRow("Check every", self.spin("updates.interval_minutes", 5, 1440, " min"))
         f2.addRow(self.check("updates.auto_install", "Install updates automatically"))
-        f2.addRow(self.check("updates.auto_restart", "Restart Nebula automatically after an update (when idle)"))
+        f2.addRow(self.check("updates.auto_restart", "Restart after updating (only when no game is running)"))
         repo = QLineEdit(self.st.get("updates.repo"))
         repo.editingFinished.connect(lambda: self.st.set("updates.repo", repo.text().strip()))
         f2.addRow("GitHub repository", repo)
         branch = QLineEdit(self.st.get("updates.branch"))
         branch.editingFinished.connect(lambda: self.st.set("updates.branch", branch.text().strip() or "main"))
         f2.addRow("Branch", branch)
+        token = QLineEdit(self.st.get("updates.github_token"))
+        token.setEchoMode(QLineEdit.EchoMode.Password)
+        token.setPlaceholderText("Only for a private repository (uses `gh auth token` if empty)")
+        token.editingFinished.connect(lambda: self.st.set("updates.github_token", token.text().strip()))
+        f2.addRow("GitHub token", token)
         lay.addWidget(g2)
         g3 = QGroupBox("Last update")
         v3 = QVBoxLayout(g3)
@@ -336,15 +331,6 @@ class SettingsPage(Page):
     # ------------------------------------------------------- compatibility
     def _compat(self) -> QWidget:
         w, lay = self._page()
-        intro = card()
-        il = QVBoxLayout(intro)
-        il.setContentsMargins(16, 14, 16, 14)
-        il.addWidget(label("Windows games run through Proton", "SectionTitle"))
-        il.addWidget(label("Every game without a native Linux build is launched with Proton (Valve's Wine + DXVK + "
-                           "VKD3D). Nebula picks the newest GE-Proton it can find, each game gets its own prefix, "
-                           "and with umu-launcher installed Proton runs inside the Steam Linux Runtime with "
-                           "per-game protonfixes — the same way Steam runs it.", "Subtle", wrap=True))
-        lay.addWidget(intro)
         g, f = self.group("Default runner")
         f.addRow("Windows games use", self.combo("compat.default_runner", [
             ("proton", "Proton (recommended)"), ("wine", "Wine")]))

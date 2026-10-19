@@ -34,8 +34,7 @@ class WelcomePage(Page):
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(sub)
         lay.addSpacing(8)
-        text = label("Sign in with your GOG account to bring in your games, cloud saves, achievements, play time "
-                     "and friends. Windows-only games run through Proton automatically.", "Subtle", wrap=True)
+        text = label("Sign in to see your GOG library, achievements and friends.", "Subtle", wrap=True)
         text.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(text)
         inner = 520 - 88
@@ -48,8 +47,7 @@ class WelcomePage(Page):
         skip = button("Continue without signing in", obj="Link")
         skip.clicked.connect(self._skip)
         lay.addWidget(skip, 0, Qt.AlignmentFlag.AlignCenter)
-        note = label("You can connect Steam, Epic Games and Lutris later in Settings › Integrations.", "Faint",
-                     wrap=True)
+        note = label("Steam, Epic Games and Lutris can be added later in Settings.", "Faint", wrap=True)
         note.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(note)
         # wrapped labels in a centred, fixed-width card need their height spelled out

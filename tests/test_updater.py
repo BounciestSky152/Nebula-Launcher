@@ -234,3 +234,22 @@ def test_preload_and_restart_command():
     cmd = up.restart_command()
     assert cmd[1:3] == ["-m", "nebula"] and cmd[-1] == "--after-update"
     assert os.path.basename(cmd[0]).startswith("python")
+
+
+def test_private_repository(tmp_path, server, gh):
+    write_tree(tmp_path / "app", V1)
+    gh.commit("a" * 40, V1)
+    # without credentials GitHub answers 404 for a private repository, on the API and the git protocol alike
+    server.handlers[("GET", f"/repos/{REPO}/")] = lambda req: (404, {}, b"Not Found")
+    server.handlers[("GET", f"/{REPO}.git/info/refs")] = lambda req: (404, {}, b"")
+    with pytest.raises(up.UpdateError, match="private.*token"):
+        make(tmp_path, server).remote_head()
+    # with a token every request is authenticated and the tarball comes from the API
+    seen = []
+    server.handlers[("GET", f"/repos/{REPO}/")] = lambda req: (
+        (seen.append(req.headers.get("Authorization")), gh.tarball(req))[1] if "/tarball/" in req.path
+        else gh.api(req))
+    gh.commit("b" * 40, dict(V1, **{"nebula/core/a.py": b"A = 5\n"}))
+    u = make(tmp_path, server, token="t0k")
+    u.apply(u.check())
+    assert seen == ["Bearer t0k"] and (tmp_path / "app/nebula/core/a.py").read_bytes() == b"A = 5\n"

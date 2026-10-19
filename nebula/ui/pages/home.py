@@ -41,9 +41,8 @@ class HomePage(Page):
         badge.setPixmap(icons.badge("G", theme.ACCENT, 46))
         sl.addWidget(badge)
         col = QVBoxLayout()
-        col.addWidget(label("Bring your GOG library", "SectionTitle"))
-        col.addWidget(label("Sign in with GOG to see your games, cloud saves, achievements and friends. "
-                            "DRM-free installs, updates and roll-backs all happen right here.", "Subtle", wrap=True))
+        col.addWidget(label("You're not signed in", "SectionTitle"))
+        col.addWidget(label("Sign in with GOG to see your games, achievements and friends.", "Subtle", wrap=True))
         sl.addLayout(col, 1)
         b = button("Sign in with GOG", primary=True)
         b.clicked.connect(ctl.gog_login)

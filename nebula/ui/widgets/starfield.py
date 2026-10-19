@@ -81,7 +81,7 @@ class Starfield(QWidget):
             r = rnd.uniform(0.25, 0.6) * max(w, h)
             hue = rnd.choice([268, 275, 285, 230, 300, 210])
             g = QRadialGradient(QPointF(cx, cy), r)
-            c = QColor.fromHsl(hue, 180, 90, rnd.randint(18, 38))
+            c = QColor.fromHsl(hue, 90, 70, rnd.randint(6, 14))
             g.setColorAt(0, c)
             g.setColorAt(1, QColor(c.red(), c.green(), c.blue(), 0))
             p.setPen(Qt.PenStyle.NoPen)
@@ -90,7 +90,7 @@ class Starfield(QWidget):
         # a faint milky band
         band = QLinearGradient(0, h * 0.15, w, h * 0.85)
         band.setColorAt(0.0, QColor(150, 140, 255, 0))
-        band.setColorAt(0.5, QColor(170, 150, 255, 14))
+        band.setColorAt(0.5, QColor(200, 200, 230, 6))
         band.setColorAt(1.0, QColor(150, 140, 255, 0))
         p.fillRect(QRectF(0, 0, w, h), band)
         # stars
@@ -104,19 +104,15 @@ class Starfield(QWidget):
             col.setAlpha(int(70 + mag * 185))
             p.setBrush(col)
             p.drawEllipse(QPointF(x, y), radius, radius)
-            if mag > 0.82:
-                glow = QRadialGradient(QPointF(x, y), radius * 6)
+            if mag > 0.9:
+                glow = QRadialGradient(QPointF(x, y), radius * 4)
                 gc = QColor(col)
-                gc.setAlpha(60)
+                gc.setAlpha(35)
                 glow.setColorAt(0, gc)
                 gc.setAlpha(0)
                 glow.setColorAt(1, gc)
                 p.setBrush(glow)
-                p.drawEllipse(QPointF(x, y), radius * 6, radius * 6)
-                p.setPen(QPen(QColor(255, 255, 255, 70), 0.6))
-                p.drawLine(QPointF(x - radius * 5, y), QPointF(x + radius * 5, y))
-                p.drawLine(QPointF(x, y - radius * 5), QPointF(x, y + radius * 5))
-                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(x, y), radius * 4, radius * 4)
             if len(self._twinkle) < TWINKLERS and 0.25 < mag < 0.8 and i % 3 == 0:
                 self._twinkle.append((x, y, radius + 0.4, rnd.uniform(0, math.tau), QColor(rnd.choice(STAR_COLORS))))
         p.end()

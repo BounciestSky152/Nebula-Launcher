@@ -174,6 +174,8 @@ button. It also has switches for automatic checking, installing and restarting, 
 repository/branch to follow. Start with `nebula --no-update` (or set `NEBULA_NO_UPDATE=1`) to turn the updater
 off for one session.
 
+**Private repository:** GitHub answers *404* to anonymous requests, so add a token in Settings › Updates. Without one, Nebula uses `$GITHUB_TOKEN` or the GitHub CLI login (`gh auth login`).
+
 The updater only contacts GitHub. Checking for a new commit uses a conditional request that doesn't count
 against GitHub's API rate limit, and if the limit is reached anyway it falls back to the git protocol. The file
 list and the tarball are fetched only when there really is a new commit.
