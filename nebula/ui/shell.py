@@ -1,7 +1,10 @@
 """Sidebar and top bar (GOG-first layout, modelled on GOG Galaxy 2.0)."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QSize, QStringListModel, Qt, QTimer, Signal
+import random
+
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, QStringListModel, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (QButtonGroup, QCompleter, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton,
                                QScrollArea, QVBoxLayout, QWidget)
 
@@ -51,12 +54,17 @@ class SidebarButton(QPushButton):
         self.count.setText(str(n) if n else "")
 
     def set_badge(self, n: int) -> None:
-        if n:
-            self.count.setText(f" {n} ")
-            self.count.setStyleSheet(f"background:{theme.ACCENT}; color:white; border-radius:7px; font-size:8pt; "
-                                     "font-weight:700; padding: 0 3px;")
+        if n:  # a small pill, not a full-height block
+            self.count.setText(str(n))
+            self.count.setFixedHeight(16)
+            self.count.setMinimumWidth(18)
+            self.count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.count.setStyleSheet("background: rgba(183, 156, 255, 0.24); color: #ece6ff; border-radius: 8px; "
+                                     "font-size: 7.5pt; font-weight: 700; padding: 0 5px;")
         else:
             self.count.setText("")
+            self.count.setMinimumSize(0, 0)
+            self.count.setMaximumHeight(16777215)
             self.count.setStyleSheet(f"color:{theme.TEXT_FAINT}; font-size: 8pt; background: transparent;")
 
     def set_syncing(self, on: bool) -> None:
@@ -75,6 +83,7 @@ class Sidebar(QWidget):
         self.setObjectName("Sidebar")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedWidth(236)
+        self._bg: QPixmap | None = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -118,6 +127,7 @@ class Sidebar(QWidget):
         bottom = QHBoxLayout()
         bottom.setContentsMargins(12, 8, 12, 14)
         add = QPushButton("  Add games && friends")
+        add.setObjectName("SidebarAdd")
         add.setIcon(icons.icon("plus", theme.TEXT))
         add.setCursor(Qt.CursorShape.PointingHandCursor)
         add.clicked.connect(self._add_menu)
@@ -135,6 +145,49 @@ class Sidebar(QWidget):
         self._count_timer.timeout.connect(self.update_counts)
         self.update_counts()
 
+
+    # deep-space backdrop: drawn once per size, nothing animates here
+    def resizeEvent(self, e):  # noqa: N802
+        super().resizeEvent(e)
+        self._bg = None
+
+    def paintEvent(self, _e):  # noqa: N802
+        if self._bg is None:
+            self._bg = self._render_bg()
+        QPainter(self).drawPixmap(0, 0, self._bg)
+
+    def _render_bg(self) -> QPixmap:
+        w, h = max(1, self.width()), max(1, self.height())
+        dpr = self.devicePixelRatioF() or 1.0
+        pm = QPixmap(int(w * dpr), int(h * dpr))
+        pm.setDevicePixelRatio(dpr)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        sky = QLinearGradient(0, 0, 0, h)
+        sky.setColorAt(0, QColor(10, 9, 20))
+        sky.setColorAt(1, QColor(7, 7, 12))
+        p.fillRect(QRectF(0, 0, w, h), sky)
+        p.setPen(Qt.PenStyle.NoPen)
+        for cx, cy, r, col in ((w * 0.15, 40, 220, QColor(123, 79, 196, 46)),
+                               (w * 1.0, h * 0.72, 260, QColor(60, 90, 190, 26))):
+            glow = QRadialGradient(QPointF(cx, cy), r)
+            glow.setColorAt(0, col)
+            glow.setColorAt(1, QColor(col.red(), col.green(), col.blue(), 0))
+            p.setBrush(glow)
+            p.drawEllipse(QPointF(cx, cy), r, r)
+        rnd = random.Random(11)
+        for _ in range(int(w * h / 2200)):
+            mag = rnd.random() ** 3
+            p.setBrush(QColor(225, 225, 255, int(40 + mag * 150)))
+            r = 0.4 + mag * 0.9
+            p.drawEllipse(QPointF(rnd.uniform(0, w), rnd.uniform(0, h)), r, r)
+        edge = QLinearGradient(0, 0, 0, h)  # a faint lit edge towards the content
+        edge.setColorAt(0, QColor(150, 120, 230, 90))
+        edge.setColorAt(0.5, QColor(150, 120, 230, 25))
+        edge.setColorAt(1, QColor(150, 120, 230, 0))
+        p.fillRect(QRectF(w - 1, 0, 1, h), edge)
+        p.end()
+        return pm
     def _section(self, text: str) -> QLabel:
         lb = label(text.upper(), "SidebarSection")
         self.lay.addWidget(lb)

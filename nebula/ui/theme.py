@@ -54,8 +54,7 @@ QToolTip {{
 }}
 /* ---------------- sidebar ---------------- */
 #Sidebar {{
-    background: {GLASS_DARK};
-    border-right: 1px solid {GLASS_BORDER};
+    background: transparent;  /* painted by Sidebar.paintEvent */
 }}
 #Brand {{
     font-size: 15pt;
@@ -63,17 +62,17 @@ QToolTip {{
     letter-spacing: 3px;
 }}
 #BrandSub {{
-    color: {ACCENT_HOVER};
+    color: #a9a3c9;
     font-size: 8pt;
     font-weight: 700;
     letter-spacing: 2px;
 }}
 #SidebarSection {{
-    color: {TEXT_FAINT};
-    font-size: 8pt;
-    font-weight: 600;
-    letter-spacing: 1px;
-    padding: 14px 18px 4px 18px;
+    color: #7d7899;
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 16px 20px 5px 20px;
 }}
 QPushButton#SidebarButton {{
     text-align: left;
@@ -85,12 +84,27 @@ QPushButton#SidebarButton {{
     background: transparent;
 }}
 QPushButton#SidebarButton:hover {{
-    background: {SURFACE};
+    background: rgba(255, 255, 255, 0.05);
     color: {TEXT};
 }}
 QPushButton#SidebarButton:checked {{
-    background: {ACCENT_SOFT};
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 rgba(140, 98, 212, 0.42), stop:1 rgba(140, 98, 212, 0.02));
+    border-left: 2px solid #b79cff;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
     color: {TEXT};
+}}
+QPushButton#SidebarAdd {{
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(183, 156, 255, 0.25);
+    border-radius: 6px;
+    padding: 8px;
+    color: {TEXT};
+}}
+QPushButton#SidebarAdd:hover {{
+    background: rgba(140, 98, 212, 0.22);
+    border-color: rgba(183, 156, 255, 0.5);
 }}
 #ProfileName {{
     font-weight: 600;
