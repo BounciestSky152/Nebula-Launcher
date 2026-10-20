@@ -194,7 +194,7 @@ class Navigation(QObject):
             self.win.go_back()
             return True
         w = QApplication.focusWidget()
-        if isinstance(w, QAbstractButton) and obj is w and key in (Qt.Key.Key_Up, Qt.Key.Key_Down,
+        if isinstance(w, QAbstractButton) and obj is w and not w.property("ownNav") and key in (Qt.Key.Key_Up, Qt.Key.Key_Down,
                                                                      Qt.Key.Key_Left, Qt.Key.Key_Right):
             w.window().focusNextPrevChild(key in (Qt.Key.Key_Down, Qt.Key.Key_Right))
             return True

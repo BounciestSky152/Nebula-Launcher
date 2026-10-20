@@ -96,7 +96,8 @@ class StoreDelegate(QStyledItemDelegate):
             p.drawPixmap(r, pm)
         else:
             p.drawPixmap(r, placeholder_pixmap(r.size(), it.get("title", "")))
-        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver) or (
+            bool(option.state & QStyle.StateFlag.State_Selected) and self.view.hasFocus())
         if hovered:
             p.fillRect(r, QColor(255, 255, 255, 18))
         pid = str(it.get("id"))

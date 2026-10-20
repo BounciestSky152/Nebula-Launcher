@@ -116,10 +116,7 @@ class MainWindow(QMainWindow):
             if not self.history or self.history[-1] != (page, arg):
                 self.history.append((page, arg))
             self.hist_index = len(self.history) - 1
-        chrome = page not in ("welcome", "handheld") and not theme.HANDHELD  # Big Picture style: no desktop chrome
-        self.sidebar.setVisible(chrome)
-        self.topbar.setVisible(chrome)
-        self.friends.setVisible(chrome and bool(self.s.settings.get("window.friends_open")))
+        self._apply_chrome(page)
         self.stack.setCurrentWidget(w)
         w.on_show(arg)
         self.sidebar.select(page, arg)
@@ -162,6 +159,19 @@ class MainWindow(QMainWindow):
         elif key == "general.autostart":
             autostart.apply(bool(value))
 
+    def _apply_chrome(self, page: str) -> None:
+        """Sidebar, top bar and friends panel: hidden on the welcome screen and everywhere in handheld mode."""
+        chrome = page not in ("welcome", "handheld") and not theme.HANDHELD
+        self.sidebar.setVisible(chrome)
+        self.topbar.setVisible(chrome)
+        friends = chrome and bool(self.s.settings.get("window.friends_open"))
+        self.friends.setVisible(friends)
+        self.topbar.friends.setChecked(friends)
+
+    def _current_page(self) -> str:
+        w = self.stack.currentWidget()
+        return next((k for k, p in self.pages.items() if p is w), "home")
+
     def _set_handheld(self, on: bool) -> None:
         if not hasattr(self, "_gamepad"):
             self._gamepad = handheld_mod.Gamepad(on_kind=self.pages["handheld"].set_controller)
@@ -173,13 +183,20 @@ class MainWindow(QMainWindow):
             if self.isVisible():
                 self.showFullScreen()
                 self.navigate("handheld")
+            else:
+                self._apply_chrome(self._current_page())
         else:
             self._gamepad.stop()
             app.removeEventFilter(self._nav)
             if self.isFullScreen():
                 self.showNormal()
-            if self.stack.currentWidget() is self.pages.get("handheld"):
+            # forget the handheld screen in back/forward history, then bring the desktop chrome back
+            self.history = [h for h in self.history if h[0] != "handheld"]
+            self.hist_index = len(self.history) - 1
+            if self._current_page() == "handheld":
                 self.navigate("home")
+            else:
+                self._apply_chrome(self._current_page())
 
     def go_back(self) -> None:
         if self.hist_index > 0:
