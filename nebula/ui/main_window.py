@@ -5,7 +5,7 @@ import logging
 import shutil
 import subprocess
 
-from PySide6.QtCore import QByteArray, Qt
+from PySide6.QtCore import QByteArray, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QMenu, QStackedWidget, QSystemTrayIcon, \
     QVBoxLayout, QWidget
@@ -99,6 +99,9 @@ class MainWindow(QMainWindow):
         bus.game_started.connect(self._game_started)
         bus.game_stopped.connect(self._game_stopped)
         bus.game_detected.connect(self._game_detected)
+        from nebula.ui.fun import Fun
+
+        self.fun = Fun(self)  # after the window's own game handlers, so the sky is awake for celebrations
         services.settings.on_change(self._setting_changed)
         self.apply_appearance()
         geo = services.settings.get("window.geometry")
@@ -111,6 +114,8 @@ class MainWindow(QMainWindow):
         if page == "friends":
             self.toggle_friends()
             return
+        if hasattr(self, "_nav"):
+            self._nav.close_keyboard()
         w = self.pages.get(page)
         if w is None:
             return
@@ -154,6 +159,7 @@ class MainWindow(QMainWindow):
                 w.update()
         self.starfield.set_stars(bool(st.get("appearance.starfield")))
         running = bool(self.s.launcher.running)
+        self.starfield.set_fun(bool(st.get("appearance.fun")))
         self.starfield.set_animated(bool(st.get("appearance.animate_stars")) and not running)
 
     def _setting_changed(self, key: str, value) -> None:
@@ -184,12 +190,15 @@ class MainWindow(QMainWindow):
         if on:
             self._gamepad.start()
             app.installEventFilter(self._nav)
+            if hasattr(self, "fun"):
+                self.fun.install()  # still sees the arrows navigation swallows (Konami code)
             if self.isVisible():
                 self.showFullScreen()
                 self.navigate("handheld")
             else:
                 self._apply_chrome(self._current_page())
         else:
+            self._nav.close_keyboard()
             self._gamepad.stop()
             app.removeEventFilter(self._nav)
             if self.isFullScreen():
@@ -248,6 +257,11 @@ class MainWindow(QMainWindow):
             "handheld.mode", "off" if theme.HANDHELD else "on"))  # leave (or enter) handheld mode
 
     # ------------------------------------------------------ notifications
+    def celebrate(self, title: str, body: str = "") -> None:
+        if self.s.settings.get("appearance.fun"):
+            self.starfield.fireworks(5)
+        self.toast(title, body)
+
     def toast(self, title: str, body: str = "", kind: str = "info") -> None:
         self.toasts.show(title, body, kind)
 
@@ -278,9 +292,13 @@ class MainWindow(QMainWindow):
 
     # -------------------------------------------------------- game events
     def _game_started(self, uid: str) -> None:
-        self.apply_appearance()  # stop animating the sky while a game runs
-        behaviour = self.s.settings.get("general.launch_behaviour")
         st = self.s.launcher.running.get(uid)
+        if st and not st.external and self.s.settings.get("appearance.fun"):
+            self.starfield.warp()  # jump to hyperspace while the game loads, then rest the sky
+            QTimer.singleShot(1500, self.apply_appearance)
+        else:
+            self.apply_appearance()  # stop animating the sky while a game runs
+        behaviour = self.s.settings.get("general.launch_behaviour")
         if st and not st.external:
             if behaviour == "minimize":
                 self.showMinimized()

@@ -167,6 +167,7 @@ class SettingsPage(Page):
         fa.addRow(self.check("appearance.starfield", "Starry sky background"))
         fa.addRow(self.check("appearance.animate_stars", "Animate the stars (twinkling and shooting stars)"))
         fa.addRow(label("The animation pauses automatically while a game is running.", "Faint"))
+        fa.addRow(self.check("appearance.fun", "Fun extras: launch warp, seasonal skies and a few secrets"))
         th = QComboBox()
         th.setMaximumWidth(260)
         th.addItem("Nebula", "nebula")

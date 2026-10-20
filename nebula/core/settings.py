@@ -89,6 +89,7 @@ DEFAULTS: dict[str, Any] = {
     # Appearance
     "appearance.starfield": True,
     "appearance.animate_stars": True,
+    "appearance.fun": True,
     # Window state
     "window.geometry": "",
     "window.friends_open": False,

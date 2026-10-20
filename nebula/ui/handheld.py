@@ -18,8 +18,13 @@ from nebula.core import tasks
 log = logging.getLogger(__name__)
 
 def send_key(key: int) -> None:
-    target = QApplication.activePopupWidget() or QApplication.activeModalWidget() or QApplication.focusWidget() \
-        or QApplication.activeWindow()
+    top = QApplication.activePopupWidget() or QApplication.activeModalWidget()
+    focus = QApplication.focusWidget()
+    # the focused control inside an open popup (a dropdown's list) or dialog, so the pad can drive it too
+    if focus is not None and (top is None or focus is top or top.isAncestorOf(focus)):
+        target = focus
+    else:
+        target = top or QApplication.activeWindow()
     if target is None:
         return
     for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
@@ -332,3 +337,11 @@ class Navigation(QObject):
         self.keyboard.set_target(edit, done, "Done")
         self.keyboard.set_scale(max(0.8, min(2.4, self.win.height() / 800)))
         self.keyboard.open()
+        field = QRect(edit.mapTo(self.win, QPoint(0, 0)), edit.size())
+        if self.keyboard.geometry().intersects(field):  # keep the text visible while typing
+            self.keyboard.move(self.keyboard.x(), int(self.win.height() * 0.06))
+
+    def close_keyboard(self) -> None:
+        """Called whenever the page changes or handheld mode ends, so the keyboard never outlives its form."""
+        if self.keyboard is not None and self.keyboard.isVisible():
+            self.keyboard.hide()
