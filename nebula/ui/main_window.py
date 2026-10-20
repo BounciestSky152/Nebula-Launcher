@@ -18,7 +18,7 @@ from nebula.ui.controller import UiController
 from nebula.ui.friends import FriendsPanel
 from nebula.ui.pages.downloads import DownloadsPage
 from nebula.ui.pages.game import GamePage
-from nebula.ui.pages.handheld import HandheldPage
+from nebula.ui.pages.handheld import HandheldGamePage, HandheldPage
 from nebula.ui.pages.home import HomePage
 from nebula.ui.pages.library import LibraryPage
 from nebula.ui.pages.settings import SettingsPage
@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
             "settings": SettingsPage(services, self.ctl, self),
             "welcome": WelcomePage(services, self.ctl, self),
             "handheld": HandheldPage(services, self.ctl, self),
+            "handheld_game": HandheldGamePage(services, self.ctl, self),
         }
         for p in self.pages.values():
             self.stack.addWidget(p)
