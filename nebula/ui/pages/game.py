@@ -6,7 +6,7 @@ import dataclasses
 import time
 from datetime import datetime
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QMenu, QProgressBar,
                                QPushButton, QScrollArea, QStackedWidget, QTabBar, QVBoxLayout, QWidget)
 
@@ -421,6 +421,8 @@ class GamePage(Page):
 
     # -------------------------------------------------------------- data
     def on_show(self, arg=None) -> None:
+        if theme.HANDHELD:  # controller: A plays straight away
+            QTimer.singleShot(0, self.play.setFocus)
         if arg:
             if arg != self.key:
                 self.tabs.setCurrentIndex(0)

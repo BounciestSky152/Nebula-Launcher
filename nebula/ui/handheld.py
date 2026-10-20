@@ -27,11 +27,11 @@ def send_key(key: int) -> None:
 # joydev button numbers per driver (xpad / hid-playstation), mapped to the keys the UI understands:
 # confirm = Enter, back = Escape, details = F2, menu = F10
 PROFILES = {
-    "xbox": {0: Qt.Key.Key_Return, 1: Qt.Key.Key_Escape, 3: Qt.Key.Key_F2, 7: Qt.Key.Key_F10, 6: Qt.Key.Key_F10},
+    "xbox": {0: Qt.Key.Key_Return, 1: Qt.Key.Key_Escape, 3: Qt.Key.Key_F2, 7: Qt.Key.Key_F10, 6: Qt.Key.Key_F10,
+             4: Qt.Key.Key_PageUp, 5: Qt.Key.Key_PageDown},
     "playstation": {0: Qt.Key.Key_Return, 1: Qt.Key.Key_Escape, 2: Qt.Key.Key_F2, 9: Qt.Key.Key_F10,
-                    8: Qt.Key.Key_F10},
+                    8: Qt.Key.Key_F10, 4: Qt.Key.Key_PageUp, 5: Qt.Key.Key_PageDown},
 }
-PROFILES["nintendo"] = PROFILES["xbox"]
 
 # evdev button codes, by role; used whenever the driver tells us what each button is
 CODE_KEYS = {
@@ -41,7 +41,29 @@ CODE_KEYS = {
     0x134: Qt.Key.Key_F2,  # BTN_WEST / BTN_Y
     0x13A: Qt.Key.Key_F10,  # BTN_SELECT
     0x13B: Qt.Key.Key_F10,  # BTN_START
+    0x136: Qt.Key.Key_PageUp,  # BTN_TL (left bumper): previous tab
+    0x137: Qt.Key.Key_PageDown,  # BTN_TR (right bumper): next tab
 }
+# evdev axis codes: left stick and D-pad hat move the selection; triggers and the right stick do nothing
+AXIS_KEYS = {
+    0x00: (Qt.Key.Key_Left, Qt.Key.Key_Right), 0x10: (Qt.Key.Key_Left, Qt.Key.Key_Right),  # ABS_X, ABS_HAT0X
+    0x01: (Qt.Key.Key_Up, Qt.Key.Key_Down), 0x11: (Qt.Key.Key_Up, Qt.Key.Key_Down),  # ABS_Y, ABS_HAT0Y
+}
+
+
+def axis_map(fd: int) -> dict[int, tuple]:
+    """joydev axis number -> (negative key, positive key), from the driver's axis codes (JSIOCGAXMAP);
+    pads number their axes differently, so fixed numbers would put the D-pad or triggers in the wrong place."""
+    import fcntl
+
+    count = bytearray(1)
+    codes = bytearray(64)
+    try:
+        fcntl.ioctl(fd, 0x80016A11, count)  # JSIOCGAXES
+        fcntl.ioctl(fd, 0x80406A32, codes)  # JSIOCGAXMAP
+    except OSError:
+        return {}
+    return {i: AXIS_KEYS[c] for i, c in enumerate(codes[:count[0]]) if c in AXIS_KEYS}
 
 
 def button_map(fd: int) -> dict[int, int]:
@@ -74,8 +96,6 @@ def device_name(fd: int) -> str:
 
 def profile_for(name: str) -> str:
     n = name.lower()
-    if any(s in n for s in ("8bitdo", "nintendo", "switch", "joy-con", "pro controller")):
-        return "nintendo"  # B/A/X/Y printed in Nintendo positions
     if any(s in n for s in ("dualsense", "dualshock", "playstation", "sony")):
         return "playstation"
     return "xbox"  # Xbox pads, the Steam Deck and most others use the Xbox layout
@@ -122,6 +142,7 @@ class Gamepad:
         name = device_name(fd)
         kind = profile_for(name)
         buttons = button_map(fd) or PROFILES[kind]
+        axes = axis_map(fd) or self.AXES
         log.info("gamepad %s: %s (%s layout)", dev, name or "unknown", kind)
         held: dict[int, int] = {}
         try:
@@ -135,10 +156,10 @@ class Gamepad:
                 key = None
                 if etype == 1 and value == 1:
                     key = buttons.get(number)
-                elif etype == 2 and number in self.AXES:
+                elif etype == 2 and number in axes:
                     direction = -1 if value < -16000 else 1 if value > 16000 else 0
                     if direction and held.get(number) != direction:
-                        key = self.AXES[number][0 if direction < 0 else 1]
+                        key = axes[number][0 if direction < 0 else 1]
                     held[number] = direction
                 if key is not None:
                     if kind != self.kind:

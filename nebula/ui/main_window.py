@@ -116,7 +116,7 @@ class MainWindow(QMainWindow):
             if not self.history or self.history[-1] != (page, arg):
                 self.history.append((page, arg))
             self.hist_index = len(self.history) - 1
-        chrome = page not in ("welcome", "handheld")
+        chrome = page not in ("welcome", "handheld") and not theme.HANDHELD  # Big Picture style: no desktop chrome
         self.sidebar.setVisible(chrome)
         self.topbar.setVisible(chrome)
         self.friends.setVisible(chrome and bool(self.s.settings.get("window.friends_open")))
