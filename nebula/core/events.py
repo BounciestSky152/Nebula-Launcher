@@ -13,6 +13,7 @@ class EventBus(QObject):
     job_progress = Signal(str)  # job id
     game_started = Signal(str)  # uid
     game_stopped = Signal(str, int)  # uid, seconds played
+    game_detected = Signal(str)  # uid: the game of a launch handed to Steam/Lutris/Heroic is now running
     game_preparing = Signal(str, str)  # uid, status text ('' when done)
     friends_changed = Signal()
     achievements_changed = Signal(str)  # uid

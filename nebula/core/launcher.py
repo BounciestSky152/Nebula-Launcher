@@ -221,8 +221,11 @@ class GameLauncher(QObject):
         for uid, st in list(self.running.items()):
             alive = st.proc is not None and st.proc.poll() is None
             if uid in found:
+                first = not st.pids and st.proc is None and not st.external
                 st.seen = now
                 st.pids = found[uid]
+                if first:
+                    self.bus.game_detected.emit(uid)
             elif alive:
                 st.seen = now
             else:

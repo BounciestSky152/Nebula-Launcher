@@ -18,7 +18,7 @@ from nebula.ui.controller import UiController
 from nebula.ui.friends import FriendsPanel
 from nebula.ui.pages.downloads import DownloadsPage
 from nebula.ui.pages.game import GamePage
-from nebula.ui.pages.handheld import HandheldGamePage, HandheldPage
+from nebula.ui.pages.handheld import HandheldGamePage, HandheldPage, HandheldProductPage
 from nebula.ui.pages.home import HomePage
 from nebula.ui.pages.library import LibraryPage
 from nebula.ui.pages.settings import SettingsPage
@@ -85,6 +85,7 @@ class MainWindow(QMainWindow):
             "welcome": WelcomePage(services, self.ctl, self),
             "handheld": HandheldPage(services, self.ctl, self),
             "handheld_game": HandheldGamePage(services, self.ctl, self),
+            "handheld_product": HandheldProductPage(services, self.ctl, self),
         }
         for p in self.pages.values():
             self.stack.addWidget(p)
@@ -97,6 +98,7 @@ class MainWindow(QMainWindow):
         bus.navigate.connect(self.navigate)
         bus.game_started.connect(self._game_started)
         bus.game_stopped.connect(self._game_stopped)
+        bus.game_detected.connect(self._game_detected)
         services.settings.on_change(self._setting_changed)
         self.apply_appearance()
         geo = services.settings.get("window.geometry")
@@ -192,9 +194,9 @@ class MainWindow(QMainWindow):
             if self.isFullScreen():
                 self.showNormal()
             # forget the handheld screen in back/forward history, then bring the desktop chrome back
-            self.history = [h for h in self.history if h[0] != "handheld"]
+            self.history = [h for h in self.history if not h[0].startswith("handheld")]
             self.hist_index = len(self.history) - 1
-            if self._current_page() == "handheld":
+            if self._current_page().startswith("handheld"):
                 self.navigate("home")
             else:
                 self._apply_chrome(self._current_page())
@@ -285,8 +287,18 @@ class MainWindow(QMainWindow):
                 self.hide()
         self._rebuild_tray_menu()
 
+    def _game_detected(self, uid: str) -> None:
+        """A game started through Steam (or another client) is up: in Big Picture, step aside so it isn't
+        stuck behind the full-screen launcher; it comes back when the game exits."""
+        if theme.HANDHELD and self.isVisible() and not self.isMinimized():
+            self._stepped_aside = uid
+            self.showMinimized()
+
     def _game_stopped(self, uid: str, seconds: int) -> None:
         self.apply_appearance()
+        if getattr(self, "_stepped_aside", "") == uid:
+            self._stepped_aside = ""
+            self.show_window()
         if self.s.settings.get("general.launch_behaviour") in ("minimize", "hide") and not self.isVisible():
             self.show_window()
         self._rebuild_tray_menu()

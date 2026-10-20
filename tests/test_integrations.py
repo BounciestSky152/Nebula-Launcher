@@ -47,6 +47,8 @@ def test_steam_local_library(services, tmp_path, monkeypatch):
     assert games["570"].update_available
     spec = steam.prepare_launch(portal)
     assert (spec.argv and spec.argv[-1] == "steam://rungameid/620") or spec.uri == "steam://rungameid/620"
+    steam._client_cmd = lambda: ["steam"]  # games start with Steam kept in the tray, no library window
+    assert steam.prepare_launch(portal).argv == ["steam", "-silent", "steam://rungameid/620"]
     assert steam.process_hints(portal)["steam_appid"] == "620"
 
 

@@ -254,14 +254,15 @@ class SteamIntegration(Integration):
             return ["flatpak", "run", "com.valvesoftware.Steam"]
         return []
 
-    def _uri(self, uri: str) -> LaunchSpec:
+    def _uri(self, uri: str, silent: bool = False) -> LaunchSpec:
         cmd = self._client_cmd()
         if cmd:
-            return LaunchSpec(argv=cmd + [uri], description="Steam client")
+            # -silent: a Steam that isn't running yet starts in the tray instead of opening its library window
+            return LaunchSpec(argv=cmd + (["-silent"] if silent else []) + [uri], description="Steam client")
         return LaunchSpec(uri=uri, description="Steam client")
 
     def prepare_launch(self, game: Game, task_id: str = "") -> LaunchSpec:
-        return self._uri(f"steam://rungameid/{game.source_id}")
+        return self._uri(f"steam://rungameid/{game.source_id}", silent=True)
 
     def process_hints(self, game: Game) -> dict:
         return {"steam_appid": game.source_id, "paths": [game.install_path] if game.installed else []}

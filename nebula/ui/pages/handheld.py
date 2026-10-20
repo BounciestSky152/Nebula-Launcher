@@ -7,14 +7,15 @@ import time
 
 from PySide6.QtCore import QEvent, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
-from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QSpacerItem,
-                               QStackedWidget, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton,
+                               QScrollArea, QSizePolicy, QSpacerItem, QStackedWidget, QVBoxLayout, QWidget)
 
 from nebula.core import tasks
-from nebula.core.utils import human_size, playtime_text, relative_time
+from nebula.core.utils import human_size, playtime_text, relative_time, xdg_open
+from nebula.integrations.gog.api import https
 from nebula.ui.pages.base import Page
 from nebula.ui.pages.store import ITEM_ROLE, StoreModel, StoreRow
-from nebula.ui.widgets.common import Avatar, HeroBanner, label
+from nebula.ui.widgets.common import Avatar, HeroBanner, Spinner, label
 from nebula.ui.widgets.gamegrid import ENTRY_ROLE, CoverGrid, CoverRow
 
 PROMPTS = {  # button glyphs as printed on each controller; anything that isn't PlayStation uses Xbox
@@ -226,10 +227,28 @@ class HandheldPage(Page):
         ll.addWidget(self.grid, 1)
         self.section = "all"
         self.tabs.addWidget(lib)
-        # Store: GOG shelves; the first one has wide feature tiles
+        # Store: a search box above GOG shelves; the first shelf has wide feature tiles
         self.owned: set[str] = set()  # read by the store tiles ("IN LIBRARY" / "WISHLISTED" tags)
         self.wishlist: set[str] = set()
+        store_tab = QWidget()
+        store_tab.setStyleSheet("background: transparent;")
+        sl = QVBoxLayout(store_tab)
+        sl.setContentsMargins(0, 0, 0, 0)
+        sl.setSpacing(10)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search the GOG store   (A: on-screen keyboard)")
+        self.search.installEventFilter(self)
+        sl.addWidget(self.search)
         self.store_area, store = scroll_box()
+        sl.addWidget(self.store_area, 1)
+        self._query = ""
+        self.results_head = label("", "SidebarSection")
+        self.results = StoreRow(self)
+        self._controller_view(self.results)
+        self.results.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        for w in (self.results_head, self.results):
+            store.addWidget(w)
+            w.hide()
         self.store_rows: list[tuple[QLabel, StoreRow]] = []
         for _key, text in self.STORE:
             head = label(text.upper(), "SidebarSection")
@@ -241,11 +260,19 @@ class HandheldPage(Page):
             head.hide()
             row.hide()
             self.store_rows.append((head, row))
+        note = QHBoxLayout()
+        note.setSpacing(12)
+        self.store_spin = Spinner(26)
+        self.store_spin.hide()
         self.store_note = label("", "Subtle", wrap=True)
-        store.addWidget(self.store_note)
+        note.addWidget(self.store_spin)
+        note.addWidget(self.store_note, 1)
+        store.addLayout(note)
         store.addStretch(1)
         self._store_loaded = False
-        self.tabs.addWidget(self.store_area)
+        self.tabs.addWidget(store_tab)
+        self.keyboard = Keyboard(self.search, self._search, self)
+        self.keyboard.hide()
 
         self.prompts = Prompts()
         lay.addWidget(self.prompts)
@@ -265,17 +292,18 @@ class HandheldPage(Page):
         """Show the prompts of the controller in use (PlayStation layout, otherwise Xbox)."""
         self.kind = kind
         self.prompts.set_items(PROMPTS.get(kind, PROMPTS["xbox"]))
-        card = self.win.pages.get("handheld_game") if hasattr(self.win, "pages") else None
-        if card is not None:
-            card.set_controller(kind)
+        for name in ("handheld_game", "handheld_product"):
+            card = self.win.pages.get(name) if hasattr(self.win, "pages") else None
+            if card is not None:
+                card.set_controller(kind)
 
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)
         s = max(0.8, min(2.4, self.height() / BASE_HEIGHT))
         self.hero.setFixedHeight(int(self.height() * 0.62))
         self.hero.setGeometry(0, 0, self.width(), self.hero.height())
-        if abs(s - self.scale) > 0.02:
-            self.scale = s
+        if abs(s - self.scale) > 0.02 or not getattr(self, "_styled", False):
+            self.scale, self._styled = s, True
             self._apply_scale()
 
     def _apply_scale(self) -> None:
@@ -305,13 +333,22 @@ class HandheldPage(Page):
             row.setFixedHeight(row.delegate.sizeHint(None, None).height() + 14)
             row.doItemsLayout()
         self.grid.set_cover_width(int(170 * s))
-        for view in [r for _h, r in self.rows] + [r for _h, r in self.store_rows] + [self.grid]:
+        for view in [r for _h, r in self.rows] + [r for _h, r in self.store_rows] + [self.grid, self.results]:
             f = view.font()  # captions under the covers are painted with the view's font
             f.setPointSizeF(10 * s)
             view.setFont(f)
-        for head, _r in self.rows + self.store_rows:
+        for head, _r in self.rows + self.store_rows + [(self.results_head, None)]:
             head.setStyleSheet(f"font-size: {9 * s:.1f}pt;")
-        for i, (_h, row) in enumerate(self.store_rows):
+        self.store_note.setStyleSheet(f"font-size: {11 * s:.1f}pt;")
+        self.store_spin.setFixedSize(int(26 * s), int(26 * s))
+        self.search.setFixedWidth(int(560 * s))
+        self.search.setStyleSheet(
+            f"QLineEdit {{ font-size: {13 * s:.1f}pt; padding: {8 * s:.0f}px {16 * s:.0f}px;"
+            f" border-radius: {18 * s:.0f}px; background: rgba(255,255,255,0.08); color: white;"
+            " border: 2px solid transparent; } QLineEdit:focus { border-color: #b79cff;"
+            " background: rgba(140,98,212,0.30); }")
+        self.keyboard.set_scale(s)
+        for i, row in enumerate([r for _h, r in self.store_rows] + [self.results]):
             d = row.itemDelegate()
             d.set_width(int((460 if i == 0 else 300) * s))
             hint = d.sizeHint(None, None)
@@ -358,7 +395,7 @@ class HandheldPage(Page):
         tab = self.tabs.currentIndex()
         if tab == 1:
             return [self.grid]
-        rows = self.store_rows if tab == 2 else self.rows
+        rows = [(None, self.results)] + self.store_rows if tab == 2 else self.rows
         return [r for _h, r in rows if r.isVisible()]
 
     def _set_tab(self, i: int, focus: bool = True) -> None:
@@ -376,6 +413,10 @@ class HandheldPage(Page):
         views = self._views()
         if focus and views:
             self._focus(views[0], 0)
+        elif focus and i == 2:
+            self.search.setFocus()
+        if i != 2:
+            self.keyboard.hide()
 
     def _set_section(self, key: str, focus: bool = True) -> None:
         self.section = key
@@ -393,6 +434,7 @@ class HandheldPage(Page):
             return
         self._store_loaded = True
         self.store_note.setText("Loading the GOG store…")
+        self.store_spin.start()
 
         def work():
             owned = gog.owned_ids() if gog.connected() else set()
@@ -410,15 +452,49 @@ class HandheldPage(Page):
                 row.model_.set_items(items)
                 head.setVisible(bool(items))
                 row.setVisible(bool(items))
+            self.store_spin.stop()
             self.store_note.setText("" if any(lists) else "The GOG store has nothing to show right now.")
-            if self.tabs.currentIndex() == 2:
+            if self.tabs.currentIndex() == 2 and not self.search.hasFocus() and not self.keyboard.isVisible():
                 self._set_tab(2)
 
         def failed(exc):
             self._store_loaded = False
+            self.store_spin.stop()
             self.store_note.setText(f"Couldn't load the GOG store ({exc}).")
 
         tasks.run_async(work, on_done=done, on_error=failed)
+
+    def _search(self, text: str) -> None:
+        text = text.strip()
+        self._query = text
+        gog = self.s.integrations.get("gog")
+        if not text or gog is None:
+            self.results_head.hide()
+            self.results.hide()
+            self.search.setFocus()
+            return
+        self.results_head.setText(f"SEARCHING FOR “{text.upper()}”…")
+        self.results_head.show()
+        self.store_area.verticalScrollBar().setValue(0)
+
+        def done(items):
+            if text != self._query:
+                return  # a newer search is running
+            self.results.model_.set_items(items)
+            self.results_head.setText(f"RESULTS FOR “{text.upper()}”" if items else
+                                      f"NOTHING ON GOG MATCHES “{text.upper()}”")
+            self.results.setVisible(bool(items))
+            if items and self.tabs.currentIndex() == 2:
+                self._focus(self.results, 0)
+            else:
+                self.search.setFocus()
+
+        def failed(exc):
+            if text == self._query:
+                self.results_head.setText(f"SEARCH FAILED ({exc})")
+
+        tasks.run_async(lambda: gog.catalog(query=text, limit=48).get("products", []), on_done=done,
+                        on_error=failed)
 
     def _focus(self, view, column: int) -> None:
         if view.model().rowCount() == 0:
@@ -479,6 +555,29 @@ class HandheldPage(Page):
             return False
         key = e.key()
         chips = [b for _k, b in self.sections]
+        if obj is self.search:
+            if key == Qt.Key.Key_Down:
+                views = self._views()
+                if views:
+                    self._focus(views[0], 0)
+            elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if self.search.text().strip():
+                    self._search(self.search.text())
+                else:
+                    self.keyboard.open()
+            elif key == Qt.Key.Key_F2:
+                self.keyboard.open()
+            elif key in (Qt.Key.Key_PageUp, Qt.Key.Key_PageDown):
+                self._set_tab(self.tabs.currentIndex() + (1 if key == Qt.Key.Key_PageDown else -1))
+            elif key == Qt.Key.Key_Escape:
+                if self.search.text():
+                    self.search.clear()
+                    self._search("")
+                else:
+                    self._set_tab(0)
+            else:
+                return key == Qt.Key.Key_Up  # typing and the cursor keys go to the box
+            return True
         if key in (Qt.Key.Key_PageUp, Qt.Key.Key_PageDown) and (obj in self._views() or obj in chips):
             self._set_tab(self.tabs.currentIndex() + (1 if key == Qt.Key.Key_PageDown else -1))
             return True
@@ -500,7 +599,7 @@ class HandheldPage(Page):
         if isinstance(obj, StoreRow):
             item = idx.data(ITEM_ROLE) if idx.isValid() else None
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_F2) and item:
-                self.win.navigate("product", item)
+                self.win.navigate("handheld_product", item)  # the store card
                 return True
         entry = idx.data(ENTRY_ROLE) if idx.isValid() and not isinstance(obj, StoreRow) else None
         if key == Qt.Key.Key_Up and obj is self.grid and (not idx.isValid() or self.grid.visualRect(idx).top()
@@ -512,6 +611,8 @@ class HandheldPage(Page):
             i = views.index(obj) + (1 if key == Qt.Key.Key_Down else -1)
             if 0 <= i < len(views):
                 self._focus(views[i], idx.row() if idx.isValid() else 0)
+            elif i < 0 and self.tabs.currentIndex() == 2:
+                self.search.setFocus()  # top shelf: up to the search box
             return True
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and entry is not None:
             self.win.navigate("handheld_game", entry.key)  # the game card
@@ -526,103 +627,313 @@ class HandheldPage(Page):
         return False
 
 
-class HandheldGamePage(Page):
-    """A game's card in handheld mode: its artwork, the essentials and a few large buttons."""
+def nice_date(iso: str) -> str:
+    """"2015-05-18" (or GOG's "2015.05.18") -> "18 May 2015"; partial dates are returned as they are."""
+    from datetime import datetime
 
-    name = "Game"
+    iso = (iso or "").replace(".", "-")[:10]
+    try:
+        return datetime.strptime(iso, "%Y-%m-%d").strftime("%-d %b %Y")
+    except ValueError:
+        return iso
+
+
+def shorten(text: str, n: int) -> str:
+    return text if len(text) <= n else text[:n - 1] + "…"
+
+
+class Keyboard(QFrame):
+    """On-screen keyboard for typing with a controller: the stick or D-pad moves, A types, Y deletes, B closes."""
+
+    ROWS = ("1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm-:.")
+
+    def __init__(self, target: QLineEdit, on_submit, parent):
+        super().__init__(parent)
+        self.setObjectName("HHKeyboard")
+        self.target, self.on_submit = target, on_submit
+        grid = QGridLayout(self)
+        grid.setSpacing(6)
+        self.cells: list[list[QPushButton]] = []
+        for r, chars in enumerate(self.ROWS):
+            row = [self._key(ch, lambda ch=ch: target.insert(ch)) for ch in chars]
+            for c, b in enumerate(row):
+                grid.addWidget(b, r, c)
+            self.cells.append(row)
+        last, c = [], 0
+        for text, span, fn in (("⌫", 2, target.backspace), ("Space", 4, lambda: target.insert(" ")),
+                               ("Clear", 2, target.clear), ("Search", 2, self._submit)):
+            b = self._key(text, fn)
+            grid.addWidget(b, len(self.ROWS), c, 1, span)
+            last += [b] * span
+            c += span
+        self.cells.append(last)
+        self.pos = (1, 0)
+        self.set_scale(1.0)
+
+    def _key(self, text: str, fn) -> QPushButton:
+        b = QPushButton(text)
+        b.setProperty("ownNav", True)  # moves on the grid instead of in focus-chain order
+        b.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        b.installEventFilter(self)
+        b.clicked.connect(lambda _c=False: fn())
+        return b
+
+    def set_scale(self, s: float) -> None:
+        self.setStyleSheet(
+            f"#HHKeyboard {{ background: #0e0a20; border: 1px solid rgba(183,156,255,0.45);"
+            f" border-radius: {16 * s:.0f}px; }}"
+            f" QPushButton {{ font-size: {15 * s:.1f}pt; font-weight: 700; min-width: {44 * s:.0f}px;"
+            f" min-height: {40 * s:.0f}px; border-radius: {8 * s:.0f}px; color: #e6e1ff;"
+            " background: #221c3a; border: 2px solid transparent; }"
+            " QPushButton:focus { background: #6a4bb0; border-color: #b79cff; }")
+        m = int(14 * s)
+        self.layout().setContentsMargins(m, m, m, m)
+        self.adjustSize()
+
+    def open(self) -> None:
+        self.adjustSize()
+        par = self.parentWidget()
+        self.move((par.width() - self.width()) // 2, par.height() - self.height() - int(par.height() * 0.08))
+        self.show()
+        self.raise_()
+        r, c = self.pos
+        self.cells[r][c].setFocus()
+
+    def close_keyboard(self) -> None:
+        self.hide()
+        self.target.setFocus()
+
+    def _submit(self) -> None:
+        self.hide()
+        self.on_submit(self.target.text())
+
+    def eventFilter(self, obj, e):  # noqa: N802
+        if e.type() != QEvent.Type.KeyPress:
+            return False
+        key = e.key()
+        moves = {Qt.Key.Key_Left: (0, -1), Qt.Key.Key_Right: (0, 1), Qt.Key.Key_Up: (-1, 0), Qt.Key.Key_Down: (1, 0)}
+        if key in moves:
+            dr, dc = moves[key]
+            r, c = self.pos
+            cur = self.cells[r][c]
+            while 0 <= r + dr < len(self.cells) and 0 <= c + dc < len(self.cells[0]):
+                r, c = r + dr, c + dc
+                if self.cells[r][c] is not cur:  # wide keys span several columns
+                    self.pos = (r, c)
+                    self.cells[r][c].setFocus()
+                    break
+            return True
+        if key == Qt.Key.Key_F2:
+            self.target.backspace()
+        elif key == Qt.Key.Key_Escape:
+            self.close_keyboard()
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            obj.click()
+        elif key == Qt.Key.Key_Backspace:
+            self.target.backspace()
+        elif e.text() and e.text().isprintable():
+            self.target.insert(e.text())  # a real keyboard still types
+        else:
+            return key in (Qt.Key.Key_PageUp, Qt.Key.Key_PageDown)
+        return True
+
+
+class CardPage(Page):
+    """A full-screen card in handheld mode: artwork behind, title, a row of stats, a few large buttons, then
+    the description beside a column of facts. Games and store products both use it."""
+
+    CELLS = 4
+    FACTS = 10
 
     def __init__(self, services, ctl, window):
         super().__init__(services, ctl, window)
-        self.key = ""
         self.scale = 1.0
         self.hero = HeroBanner(500, self)
         self.hero.lower()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(64, 40, 64, 16)
         lay.setSpacing(12)
-        self.gap = QSpacerItem(0, 150, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.gap = QSpacerItem(0, 130, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         lay.addItem(self.gap)
         self.title = label("", "PageTitle")
         self.title.setWordWrap(True)
         self.meta = label("", "Subtle")
         lay.addWidget(self.title)
         lay.addWidget(self.meta)
-        self.stats = QHBoxLayout()
-        self.stats.setSpacing(36)
-        self.stat_cells: list[tuple[QLabel, QLabel]] = []
-        for _i in range(4):
+        stats = QHBoxLayout()
+        stats.setSpacing(36)
+        self.stat_cells: list[tuple[QLabel, QLabel, QProgressBar]] = []
+        for _i in range(self.CELLS):
             col = QVBoxLayout()
-            col.setSpacing(2)
+            col.setSpacing(3)
             k, v = label("", "StatLabel"), label("", "StatValue")
-            col.addWidget(k)
-            col.addWidget(v)
-            self.stats.addLayout(col)
-            self.stat_cells.append((k, v))
-        self.stats.addStretch(1)
-        lay.addLayout(self.stats)
-        buttons = QHBoxLayout()
-        buttons.setSpacing(14)
-        self.play = QPushButton()
-        self.fav = QPushButton()
-        self.more = QPushButton("Full details")
-        for b in (self.play, self.fav, self.more):
-            b.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            buttons.addWidget(b)
-        buttons.addStretch(1)
-        self.play.clicked.connect(lambda: self.ctl.primary_action(self.key))
-        self.fav.clicked.connect(lambda: self.ctl.toggle_favorite(self.key))
-        self.more.clicked.connect(lambda: self.win.navigate("game", self.key))
-        lay.addLayout(buttons)
+            bar = QProgressBar()
+            bar.setTextVisible(False)
+            bar.hide()
+            for w in (k, v, bar):
+                col.addWidget(w)
+            col.addStretch(1)
+            stats.addLayout(col)
+            self.stat_cells.append((k, v, bar))
+        stats.addStretch(1)
+        lay.addLayout(stats)
+        self.buttons = QHBoxLayout()
+        self.buttons.setSpacing(14)
+        self.buttons.addStretch(1)
+        lay.addLayout(self.buttons)
+        body = QHBoxLayout()
+        body.setSpacing(40)
         self.desc = label("", "Subtle", wrap=True)
         self.desc.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(self.desc, 1)
+        self.desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored)  # clipped, never pushes
+        body.addWidget(self.desc, 3)
+        self.facts_box = QFrame()
+        self.facts_box.setObjectName("HHFacts")
+        facts = QGridLayout(self.facts_box)
+        facts.setColumnStretch(1, 1)
+        self.fact_cells: list[tuple[QLabel, QLabel]] = []
+        for i in range(self.FACTS):
+            k, v = label("", "Faint"), label("", None, wrap=True)
+            facts.addWidget(k, i, 0, Qt.AlignmentFlag.AlignTop)
+            facts.addWidget(v, i, 1, Qt.AlignmentFlag.AlignTop)
+            self.fact_cells.append((k, v))
+        body.addWidget(self.facts_box, 2, Qt.AlignmentFlag.AlignTop)
+        lay.addLayout(body, 1)
         self.prompts = Prompts((("A", "#5fb85f", "Select"), ("B", "#d9534f", "Back")))
         lay.addWidget(self.prompts)
-        bus = services.bus
-        bus.game_changed.connect(lambda k: self._refresh() if k == self.key and self.isVisible() else None)
-        bus.jobs_changed.connect(lambda: self._refresh() if self.isVisible() else None)
-        bus.game_started.connect(lambda _u: self._refresh() if self.isVisible() else None)
-        bus.game_stopped.connect(lambda *_: self._refresh() if self.isVisible() else None)
+
+    def add_button(self, primary: bool = False) -> QPushButton:
+        b = QPushButton()
+        b.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setProperty("primary", primary)
+        self.buttons.insertWidget(self.buttons.count() - 1, b)
+        return b
 
     def set_controller(self, kind: str) -> None:
         items = PROMPTS.get(kind, PROMPTS["xbox"])
         self.prompts.set_items((items[0], items[2]))
+
+    def set_stats(self, cells) -> None:
+        """cells: (name, value[, progress 0..1]) per stat; a progress value adds a bar under the value."""
+        for (k, v, bar), cell in zip(self.stat_cells, cells):
+            k.setText(cell[0])
+            v.setText(cell[1])
+            progress = cell[2] if len(cell) > 2 else None
+            bar.setVisible(progress is not None)
+            bar.setValue(int((progress or 0) * 100))
+
+    def set_facts(self, rows) -> None:
+        rows = [(k, v) for k, v in rows if v][:self.FACTS]
+        for i, (k, v) in enumerate(self.fact_cells):
+            k.setText(rows[i][0] if i < len(rows) else "")
+            v.setText(rows[i][1] if i < len(rows) else "")
+            k.setVisible(i < len(rows))
+            v.setVisible(i < len(rows))
+        self.facts_box.setVisible(bool(rows))
 
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)
         s = max(0.8, min(2.4, self.height() / BASE_HEIGHT))
         self.hero.setFixedHeight(int(self.height() * 0.7))
         self.hero.setGeometry(0, 0, self.width(), self.hero.height())
-        if abs(s - self.scale) > 0.02:
-            self.scale = s
+        if abs(s - self.scale) > 0.02 or not getattr(self, "_styled", False):
+            self.scale, self._styled = s, True
             self._apply_scale()
 
     def _apply_scale(self) -> None:
         s = self.scale
         self.layout().setContentsMargins(int(64 * s), int(40 * s), int(64 * s), int(16 * s))
-        self.gap.changeSize(0, int(150 * s), QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.gap.changeSize(0, int(130 * s), QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.layout().invalidate()
         self.title.setStyleSheet(f"font-size: {34 * s:.1f}pt; background: transparent;")
         self.meta.setStyleSheet(f"font-size: {12.5 * s:.1f}pt; background: transparent;")
         self.desc.setStyleSheet(f"font-size: {11.5 * s:.1f}pt; background: transparent;")
-        for k, v in self.stat_cells:
+        for k, v, bar in self.stat_cells:
             k.setStyleSheet(f"font-size: {9 * s:.1f}pt;")
             v.setStyleSheet(f"font-size: {17 * s:.1f}pt;")
+            bar.setFixedSize(int(120 * s), max(4, int(6 * s)))
+        m = int(18 * s)
+        self.facts_box.layout().setContentsMargins(m, int(14 * s), m, int(14 * s))
+        self.facts_box.layout().setHorizontalSpacing(int(18 * s))
+        self.facts_box.layout().setVerticalSpacing(int(6 * s))
+        self.facts_box.setStyleSheet(
+            f"#HHFacts {{ background: rgba(12,9,28,0.62); border: 1px solid rgba(183,156,255,0.18);"
+            f" border-radius: {12 * s:.0f}px; }} QLabel {{ background: transparent; font-size: {10.5 * s:.1f}pt; }}")
         base = (f"font-size: {14 * s:.1f}pt; font-weight: 800; padding: {12 * s:.0f}px {30 * s:.0f}px;"
                 f" border-radius: {10 * s:.0f}px; border: 3px solid transparent;")
-        self.play.setStyleSheet(f"QPushButton {{ {base} background: #5fb85f; color: #0b1a0b; }}"
-                                " QPushButton:focus { border-color: #ffffff; }")
-        for b in (self.fav, self.more):
-            b.setStyleSheet(f"QPushButton {{ {base} background: rgba(255,255,255,0.10); color: white; }}"
-                            " QPushButton:focus { border-color: #b79cff; background: rgba(140,98,212,0.45); }")
+        for i in range(self.buttons.count()):
+            b = self.buttons.itemAt(i).widget()
+            if b is None:
+                continue
+            if b.property("primary"):
+                b.setStyleSheet(f"QPushButton {{ {base} background: #5fb85f; color: #0b1a0b; }}"
+                                " QPushButton:focus { border-color: #ffffff; }"
+                                " QPushButton:disabled { background: #3c6e3c; color: #10210f; }")
+            else:
+                b.setStyleSheet(f"QPushButton {{ {base} background: rgba(255,255,255,0.10); color: white; }}"
+                                " QPushButton:focus { border-color: #b79cff; background: rgba(140,98,212,0.45); }")
         self.prompts.set_scale(s)
+
+
+class HandheldGamePage(CardPage):
+    """A game's card: its artwork, the essentials, a few large buttons and the details that matter."""
+
+    name = "Game"
+    CELLS = 6
+
+    def __init__(self, services, ctl, window):
+        super().__init__(services, ctl, window)
+        self.key = ""
+        self.play = self.add_button(primary=True)
+        self.fav = self.add_button()
+        self.more = self.add_button()
+        self.more.setText("Full details")
+        self.play.clicked.connect(lambda: self.ctl.primary_action(self.key))
+        self.fav.clicked.connect(lambda: self.ctl.toggle_favorite(self.key))
+        self.more.clicked.connect(lambda: self.win.navigate("game", self.key))
+        bus = services.bus
+        bus.game_changed.connect(lambda k: self._refresh() if k == self.key and self.isVisible() else None)
+        bus.jobs_changed.connect(lambda: self._refresh() if self.isVisible() else None)
+        bus.game_started.connect(lambda _u: self._refresh() if self.isVisible() else None)
+        bus.game_detected.connect(lambda _u: self._refresh() if self.isVisible() else None)
+        bus.game_stopped.connect(lambda *_: self._refresh() if self.isVisible() else None)
 
     def on_show(self, arg=None) -> None:
         if arg:
             self.key = arg
         self._refresh()
         QTimer.singleShot(0, self.play.setFocus)
+
+    def _runs_with(self, inst) -> str:
+        if inst is None:
+            return "—"
+        if inst.source in ("steam", "lutris"):
+            integ = self.s.integrations.get(inst.source)
+            return integ.name if integ else inst.source.title()
+        if inst.platform == "windows":
+            cfg = self.s.db.get_config(inst.uid)
+            if cfg.get("runner") == "native":
+                return "Native"
+            runner = self.s.compat.runner_for(inst.uid, cfg)
+            return runner.name if runner else "GE-Proton (auto)"
+        return {"linux": "Linux native", "mac": "macOS"}.get(inst.platform, "Native")
+
+    def _versions(self, inst) -> tuple[str, str]:
+        """(installed version, newer version or "") of the installed copy."""
+        if inst is None:
+            return "", ""
+        text, newest = inst.version or inst.build_id or "", ""
+        integ = self.s.integrations.get(inst.source)
+        try:
+            info = integ.version_info(inst, fetch=False) if integ else None
+        except Exception:  # noqa: BLE001 - details only
+            info = None
+        if info is not None:
+            text = info.installed.label if info.installed.version or info.installed.id else text
+            if info.latest is not None and info.status == "behind":
+                newest = info.latest.label
+        return text, newest
 
     def _refresh(self) -> None:
         e = self.s.library.entry(self.key)
@@ -633,19 +944,137 @@ class HandheldGamePage(Page):
         names = [self.s.integrations[s].name for s in e.sources if s in self.s.integrations]
         self.meta.setText("  •  ".join(x for x in (" + ".join(names), ", ".join(e.genres[:3]),
                                                    (e.release_date or "")[:4]) if x))
+        inst = self.ctl.installed_game(e)
+        version, newest = self._versions(inst)
         unlocked, total = e.achievements
-        cells = (("TIME PLAYED", playtime_text(e.playtime_minutes) if e.playtime_minutes else "—"),
-                 ("LAST PLAYED", relative_time(e.last_played) if e.last_played else "Never"),
-                 ("ACHIEVEMENTS", f"{unlocked} / {total}" if total else "—"),
-                 ("SIZE", human_size(e.install_size) if e.installed and e.install_size else "Not installed"))
-        for (k, v), (key, value) in zip(self.stat_cells, cells):
-            k.setText(key)
-            v.setText(value)
+        self.set_stats((
+            ("TIME PLAYED", playtime_text(e.playtime_minutes) if e.playtime_minutes else "—"),
+            ("LAST PLAYED", relative_time(e.last_played) if e.last_played else "Never"),
+            ("ACHIEVEMENTS", f"{unlocked} / {total}" if total else "—", unlocked / total if total else None),
+            ("SIZE", human_size(e.install_size) if e.installed and e.install_size else "Not installed"),
+            ("RUNS WITH", shorten(self._runs_with(inst), 22)),
+            ("VERSION", shorten(version, 18) if version else "—"),
+        ))
+        first = lambda attr: next((getattr(g, attr) for g in e.games if getattr(g, attr)), "")  # noqa: E731
+        systems = sorted({o for g in e.games for o in g.os_support})
+        score = max((g.critic_score for g in e.games), default=0)
+        path = inst.install_path if inst else ""
+        tags = list(e.user.tags) + [t for g in e.games for t in g.extra.get("gog_tags", [])]
+        self.set_facts((
+            ("Developer", first("developer")),
+            ("Publisher", first("publisher")),
+            ("Released", nice_date(e.release_date)),
+            ("Platforms", ", ".join({"windows": "Windows", "linux": "Linux", "mac": "macOS", "osx": "macOS"}
+                                    .get(o, o) for o in systems)),
+            ("Critics", f"{score:.0f} / 100" if score else ""),
+            ("Sessions", str(e.sessions) if e.sessions else ""),
+            ("Update", f"{newest} available" if newest else ""),
+            ("Tags", ", ".join(dict.fromkeys(tags[:6]))),
+            ("Installed in", path if len(path) <= 44 else "…" + path[-43:]),
+        ))
         state = self.ctl.game_state(e)
-        self.play.setText({"running": "■  STOP", "preparing": "STARTING…", "job": "DOWNLOADING…",
-                           "update": "⬇  UPDATE" if self.ctl.update_target(e) else "▶  PLAY",
-                           "installed": "▶  PLAY", "not_installed": "⬇  INSTALL"}[state])
+        text = {"running": "■  STOP", "preparing": "STARTING…", "job": "DOWNLOADING…",
+                "update": "⬇  UPDATE" if self.ctl.update_target(e) else "▶  PLAY",
+                "installed": "▶  PLAY", "not_installed": "⬇  INSTALL"}[state]
+        st = self.s.launcher.entry_running(e) if state == "running" else None
+        if st is not None and st.proc is None and not st.pids and not st.external:
+            g = self.s.library.game(st.uid)  # handed to Steam: say so until the game itself shows up
+            client = self.s.integrations[g.source].name if g and g.source in self.s.integrations else "Steam"
+            text = f"STARTING IN {client.upper()}…"
+        self.play.setText(text)
         self.play.setEnabled(state not in ("preparing", "job"))
         self.fav.setText("♥  Favourite" if e.user.favorite else "♡  Favourite")
         desc = next((g.description for g in e.games if g.description), "")
-        self.desc.setText(desc[:600] + ("…" if len(desc) > 600 else ""))
+        self.desc.setText(shorten(desc, 900))
+
+
+class HandheldProductPage(CardPage):
+    """A GOG store product as a card: price, rating, wishlist and the store description."""
+
+    name = "Store"
+
+    def __init__(self, services, ctl, window):
+        super().__init__(services, ctl, window)
+        self.gog = services.integrations.get("gog")
+        self.item: dict = {}
+        self.main = self.add_button(primary=True)
+        self.wish = self.add_button()
+        self.main.clicked.connect(self._main)
+        self.wish.clicked.connect(self._toggle_wish)
+
+    def _owned_entry(self):
+        g = self.s.library.game(f"gog:{self.item.get('id')}")
+        return self.s.library.entry_for_uid(g.uid) if g else None
+
+    def on_show(self, arg=None) -> None:
+        if isinstance(arg, dict):
+            self.item = arg
+        it = self.item
+        pid = str(it.get("id", ""))
+        hp = self.win.pages.get("handheld")
+        owned = pid in getattr(hp, "owned", set()) or self._owned_entry() is not None
+        wished = pid in getattr(hp, "wishlist", set())
+        self.title.setText(it.get("title", ""))
+        genres = [g.get("name", "") for g in it.get("genres", []) or [] if isinstance(g, dict)]
+        self.meta.setText("  •  ".join(x for x in ("GOG.COM", ", ".join(genres[:3]),
+                                                   (it.get("releaseDate") or "")[:4]) if x))
+        price = it.get("price") or {}
+        if owned:
+            cost = "In your library"
+        elif price.get("discount"):
+            cost = (f"{price.get('final', '')}  <span style='color:#5fb85f'>{price['discount']}</span>"
+                    f"  <s style='color:#8d86ba'>{price.get('base', '')}</s>")
+        else:
+            cost = price.get("final") or "—"
+        rating = it.get("reviewsRating") or 0
+        systems = {"windows": "Windows", "linux": "Linux", "osx": "macOS"}
+        self.set_stats((("PRICE", cost), ("RATING", f"★ {rating / 10:.1f} / 5" if rating else "—"),
+                        ("RELEASED", nice_date(it.get("releaseDate") or "") or "—"),
+                        ("SYSTEMS", " • ".join(systems[o] for o in it.get("operatingSystems", []) or []
+                                               if o in systems) or "—")))
+        tags = [t.get("name", "") for t in it.get("tags", []) or [] if isinstance(t, dict)]
+        self.set_facts((("Developer", ", ".join(it.get("developers", []) or [])),
+                        ("Publisher", ", ".join(it.get("publishers", []) or [])),
+                        ("Genres", ", ".join(genres)), ("Tags", ", ".join(tags[:6])),
+                        ("Type", "DLC" if it.get("productType") == "dlc" else ""),
+                        ("Wishlist", "On your wishlist" if wished and not owned else "")))
+        self.main.setText("▶  GO TO GAME" if owned else "BUY ON GOG.COM")
+        self.wish.setVisible(not owned and bool(self.gog) and self.gog.wishlist_available())
+        self.wish.setText("♥  Wishlisted" if wished else "♡  Wishlist")
+        self.hero.set_source([it.get("coverHorizontal", "")], it.get("title", ""))
+        self.desc.setText("Loading the store page…")
+        if self.gog is not None:
+            tasks.run_async(self.gog.store_product, pid, on_done=self._details,
+                            on_error=lambda exc: self.desc.setText(f"Couldn't load the store page ({exc})."))
+        QTimer.singleShot(0, self.main.setFocus)
+
+    def _details(self, p: dict) -> None:
+        if str(p.get("id")) != str(self.item.get("id")):
+            return
+        bg = (p.get("images") or {}).get("background")
+        if bg:
+            self.hero.set_source([https(bg), self.item.get("coverHorizontal", "")], self.item.get("title", ""))
+        self.desc.setText(shorten(p.get("_description_text") or "", 900))
+
+    def _main(self) -> None:
+        e = self._owned_entry()
+        if e is not None:
+            self.win.navigate("handheld_game", e.key)
+        else:
+            xdg_open(self.item.get("storeLink") or f"https://www.gog.com/en/game/{self.item.get('slug', '')}")
+
+    def _toggle_wish(self) -> None:
+        pid = str(self.item.get("id"))
+        hp = self.win.pages.get("handheld")
+        want = pid not in hp.wishlist
+        (hp.wishlist.add if want else hp.wishlist.discard)(pid)
+        self.wish.setText("♥  Wishlisted" if want else "♡  Wishlist")
+
+        def failed(exc):
+            (hp.wishlist.discard if want else hp.wishlist.add)(pid)
+            self.wish.setText("♡  Wishlist" if want else "♥  Wishlisted")
+            self.win.toast("Wishlist", str(exc), "error")
+
+        tasks.run_async(self.gog.set_wishlisted, pid, want, on_error=failed,
+                        on_done=lambda _r: self.win.toast("Wishlist", "Added to your wishlist" if want
+                                                          else "Removed from your wishlist"))
