@@ -15,6 +15,8 @@ from nebula.ui.widgets.gamegrid import ENTRY_ROLE, CoverRow
 PROMPTS = {  # button glyphs as printed on each controller
     "xbox": (("A", "#5fb85f", "Play"), ("Y", "#e0b400", "Details"), ("B", "#d9534f", "Back"),
              ("☰", "#8c84b8", "Settings")),
+    "nintendo": (("B", "#c9c9d6", "Play"), ("X", "#c9c9d6", "Details"), ("A", "#c9c9d6", "Back"),
+                 ("+", "#8c84b8", "Settings")),
     "playstation": (("✕", "#7fa7e0", "Play"), ("△", "#4fc2a8", "Details"), ("○", "#e0707a", "Back"),
                     ("≡", "#8c84b8", "Settings")),
 }

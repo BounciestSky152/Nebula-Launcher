@@ -1,6 +1,6 @@
 """Nebula - a unified game launcher for Linux inspired by GOG Galaxy 2.0."""
 
-__version__ = "1.3.3"
+__version__ = "1.3.4"
 APP_NAME = "Nebula"
 APP_ID = "io.github.nebula_launcher.Nebula"
 USER_AGENT = f"Nebula/{__version__} (Linux)"

@@ -31,6 +31,34 @@ PROFILES = {
     "playstation": {0: Qt.Key.Key_Return, 1: Qt.Key.Key_Escape, 2: Qt.Key.Key_F2, 9: Qt.Key.Key_F10,
                     8: Qt.Key.Key_F10},
 }
+PROFILES["nintendo"] = PROFILES["xbox"]
+
+# evdev button codes, by role; used whenever the driver tells us what each button is
+CODE_KEYS = {
+    0x130: Qt.Key.Key_Return,  # BTN_SOUTH (bottom face button)
+    0x131: Qt.Key.Key_Escape,  # BTN_EAST (right)
+    0x133: Qt.Key.Key_F2,  # BTN_NORTH / BTN_X
+    0x134: Qt.Key.Key_F2,  # BTN_WEST / BTN_Y
+    0x13A: Qt.Key.Key_F10,  # BTN_SELECT
+    0x13B: Qt.Key.Key_F10,  # BTN_START
+}
+
+
+def button_map(fd: int) -> dict[int, int]:
+    """joydev button number -> UI key, from the driver's button codes (JSIOCGBTNMAP). Empty when the pad
+    doesn't use the standard gamepad codes; the name-based profile is used then."""
+    import array
+    import fcntl
+
+    count = bytearray(1)
+    codes = array.array("H", [0] * 512)
+    try:
+        fcntl.ioctl(fd, 0x80016A12, count)  # JSIOCGBUTTONS
+        fcntl.ioctl(fd, 0x80006A34 + (len(codes) * 2 << 16), codes)  # JSIOCGBTNMAP(len)
+    except OSError:
+        return {}
+    found = {i: CODE_KEYS[c] for i, c in enumerate(codes[:count[0]]) if c in CODE_KEYS}
+    return found if 0x130 in codes[:count[0]] else {}
 
 
 def device_name(fd: int) -> str:
@@ -46,7 +74,9 @@ def device_name(fd: int) -> str:
 
 def profile_for(name: str) -> str:
     n = name.lower()
-    if any(s in n for s in ("dualsense", "dualshock", "wireless controller", "playstation", "sony")):
+    if any(s in n for s in ("8bitdo", "nintendo", "switch", "joy-con", "pro controller")):
+        return "nintendo"  # B/A/X/Y printed in Nintendo positions
+    if any(s in n for s in ("dualsense", "dualshock", "playstation", "sony")):
         return "playstation"
     return "xbox"  # Xbox pads, the Steam Deck and most others use the Xbox layout
 
@@ -91,7 +121,7 @@ class Gamepad:
             return
         name = device_name(fd)
         kind = profile_for(name)
-        buttons = PROFILES[kind]
+        buttons = button_map(fd) or PROFILES[kind]
         log.info("gamepad %s: %s (%s layout)", dev, name or "unknown", kind)
         held: dict[int, int] = {}
         try:
