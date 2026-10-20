@@ -1,7 +1,7 @@
 """Settings page (General, Library, Downloads, Compatibility, Cloud saves, Integrations, About)."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLineEdit,
                                QListWidget, QListWidgetItem, QMessageBox, QScrollArea, QSpinBox, QTabWidget,
                                QVBoxLayout, QWidget)
@@ -47,6 +47,29 @@ class SettingsPage(Page):
         services.bus.integration_changed.connect(lambda _i: (self._build_integrations(), self._refresh_gog_account()))
         services.bus.runners_changed.connect(self._refresh_runners)
         services.bus.sync_state.connect(lambda *_: self._build_integrations() if self.isVisible() else None)
+        # handheld mode drives this page as a form (see nebula.ui.handheld.Navigation); the footer shows how
+        self.setProperty("controllerForm", True)
+        from nebula.ui.pages.handheld import Prompts
+
+        self.prompts = Prompts()
+        lay.addWidget(self.prompts)
+        self.set_controller("xbox")
+        self.set_handheld(theme.HANDHELD)
+
+    def set_controller(self, kind: str) -> None:
+        from nebula.ui.pages.handheld import PROMPTS
+
+        items = PROMPTS.get(kind, PROMPTS["xbox"])
+        sh = ("L1", "R1") if kind == "playstation" else ("LB", "RB")
+        self.prompts.set_items(((sh[0], "#8c84b8", ""), (sh[1], "#8c84b8", "Section"), ("◀▶", "#8c84b8", "Change"),
+                                items[0], items[2]))
+
+    def set_handheld(self, on: bool) -> None:
+        self.handheld_combo.blockSignals(True)  # F11 switches the mode without this page
+        self.handheld_combo.setCurrentIndex(max(0, self.handheld_combo.findData("on" if on else "off")))
+        self.handheld_combo.blockSignals(False)
+        self.prompts.setVisible(on)
+        self.layout().setContentsMargins(32, 22, 32, 14 if on else 0)
 
     def on_show(self, arg=None) -> None:
         if isinstance(arg, str):
@@ -55,6 +78,8 @@ class SettingsPage(Page):
                     self.tabs.setCurrentIndex(i)
         self._build_integrations()
         self._refresh_runners()
+        if theme.HANDHELD:
+            QTimer.singleShot(0, self.tabs.tabBar().setFocus)  # a pad starts on the section tabs
 
     # ------------------------------------------------------------ helpers
     def _scroll(self, w: QWidget) -> QScrollArea:
@@ -151,7 +176,7 @@ class SettingsPage(Page):
         fa.addRow("Theme", th)
         from nebula.core.settings import DEFAULTS
 
-        for key, name in (("appearance.font_ui", "Interface font"), ("appearance.font_display", "Titles && logo font"),
+        for key, name in (("appearance.font_ui", "Interface font"), ("appearance.font_display", "Titles & logo font"),
                           ("appearance.font_sidebar", "Sidebar font")):
             combo = self.font_combo(key)
             reset = icon_button("refresh", "Reset this font to its default")
@@ -169,8 +194,9 @@ class SettingsPage(Page):
         f.addRow(self.check("general.close_to_tray", "Closing the window keeps Nebula running in the tray"))
         f.addRow(self.check("general.autostart", "Start Nebula when I log in"))
         f.addRow(self.check("general.start_minimized", "Start minimised"))
-        f.addRow("Handheld mode", self.combo("handheld.mode", [
-            ("off", "Off"), ("on", "On (controller-first, fullscreen)")]))
+        self.handheld_combo = self.combo("handheld.mode", [
+            ("off", "Off"), ("on", "On (controller-first, fullscreen)")])
+        f.addRow("Handheld mode", self.handheld_combo)
         f.addRow(self.check("general.notifications", "Desktop notifications"))
         f.addRow("When a game starts", self.combo("general.launch_behaviour", [
             ("keep", "Keep Nebula open"), ("minimize", "Minimise Nebula"), ("hide", "Hide to tray")]))

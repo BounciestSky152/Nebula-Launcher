@@ -112,21 +112,24 @@ class Prompts(QWidget):
         lay.addStretch(1)
         self.items = list(items)
         self.cells: list[tuple[QLabel, QLabel]] = []
-        for _i in range(4):
-            g, t = QLabel(), label("", "Subtle")
-            lay.addWidget(g)
-            lay.addWidget(t)
-            lay.addSpacing(18)
-            self.cells.append((g, t))
         self.scale = 1.0
         self.set_items(items)
 
     def set_items(self, items) -> None:
         self.items = list(items)
+        while len(self.cells) < len(self.items):
+            g, t = QLabel(), label("", "Subtle")
+            for w in (g, t):
+                self.layout().addWidget(w)
+            self.layout().addSpacing(18)
+            self.cells.append((g, t))
         for (g, t), (text, color, what) in zip(self.cells, self.items):
-            g.setPixmap(glyph(text, color, 26 * self.scale))
+            g.setPixmap(glyph(text, color, 26 * self.scale, wide=len(text) > 1))
             t.setText(what)
             t.setStyleSheet(f"font-size: {11 * self.scale:.1f}pt;")
+        for g, t in self.cells[len(self.items):]:
+            g.clear()
+            t.clear()
         self.hint.setStyleSheet(f"font-size: {10 * self.scale:.1f}pt;")
 
     def set_scale(self, s: float) -> None:
@@ -292,7 +295,7 @@ class HandheldPage(Page):
         """Show the prompts of the controller in use (PlayStation layout, otherwise Xbox)."""
         self.kind = kind
         self.prompts.set_items(PROMPTS.get(kind, PROMPTS["xbox"]))
-        for name in ("handheld_game", "handheld_product"):
+        for name in ("handheld_game", "handheld_product", "settings"):
             card = self.win.pages.get(name) if hasattr(self.win, "pages") else None
             if card is not None:
                 card.set_controller(kind)
@@ -643,31 +646,41 @@ def shorten(text: str, n: int) -> str:
 
 
 class Keyboard(QFrame):
-    """On-screen keyboard for typing with a controller: the stick or D-pad moves, A types, Y deletes, B closes."""
+    """On-screen keyboard for typing with a controller: the stick or D-pad moves, A types, Y deletes, B closes.
+    ⇧ switches to capitals and #+= to symbols (for paths, repositories and tokens)."""
 
     ROWS = ("1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm-:.")
+    SYMBOLS = ("1234567890", "!@#$%^&*()", "-_=+/\\|~':", '<>[]{}".?,')
 
-    def __init__(self, target: QLineEdit, on_submit, parent):
+    def __init__(self, target: QLineEdit, on_submit, parent, submit: str = "Search"):
         super().__init__(parent)
         self.setObjectName("HHKeyboard")
         self.target, self.on_submit = target, on_submit
+        self.shift = self.symbols = False
         grid = QGridLayout(self)
         grid.setSpacing(6)
         self.cells: list[list[QPushButton]] = []
         for r, chars in enumerate(self.ROWS):
-            row = [self._key(ch, lambda ch=ch: target.insert(ch)) for ch in chars]
+            row = [self._key("", None) for _ch in chars]
             for c, b in enumerate(row):
+                b.clicked.connect(lambda _c=False, b=b: self.target.insert(b.property("ch")))
                 grid.addWidget(b, r, c)
             self.cells.append(row)
         last, c = [], 0
-        for text, span, fn in (("⌫", 2, target.backspace), ("Space", 4, lambda: target.insert(" ")),
-                               ("Clear", 2, target.clear), ("Search", 2, self._submit)):
-            b = self._key(text, fn)
+        self.shift_key = self._key("⇧", self._toggle_shift)
+        self.symbol_key = self._key("#+=", self._toggle_symbols)
+        self.submit_key = self._key(submit, self._submit)
+        for b, span in ((self.shift_key, 1), (self.symbol_key, 1), (self._key("⌫", lambda: self.target.backspace()), 2),
+                        (self._key("Space", lambda: self.target.insert(" ")), 2),
+                        (self._key("Clear", lambda: self.target.clear()), 2), (self.submit_key, 2)):
             grid.addWidget(b, len(self.ROWS), c, 1, span)
             last += [b] * span
             c += span
         self.cells.append(last)
+        for b in (self.shift_key, self.symbol_key):
+            b.setCheckable(True)
         self.pos = (1, 0)
+        self._relabel()
         self.set_scale(1.0)
 
     def _key(self, text: str, fn) -> QPushButton:
@@ -675,8 +688,30 @@ class Keyboard(QFrame):
         b.setProperty("ownNav", True)  # moves on the grid instead of in focus-chain order
         b.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         b.installEventFilter(self)
-        b.clicked.connect(lambda _c=False: fn())
+        if fn is not None:
+            b.clicked.connect(lambda _c=False: fn())
         return b
+
+    def set_target(self, target: QLineEdit, on_submit, submit: str) -> None:
+        self.target, self.on_submit = target, on_submit
+        self.submit_key.setText(submit)
+
+    def _relabel(self) -> None:
+        for row, chars in zip(self.cells, self.SYMBOLS if self.symbols else self.ROWS):
+            for b, ch in zip(row, chars):
+                ch = ch.upper() if self.shift and not self.symbols else ch
+                b.setProperty("ch", ch)
+                b.setText(ch.replace("&", "&&"))  # a single & would be read as a mnemonic
+        self.shift_key.setChecked(self.shift)
+        self.symbol_key.setChecked(self.symbols)
+
+    def _toggle_shift(self) -> None:
+        self.shift = not self.shift
+        self._relabel()
+
+    def _toggle_symbols(self) -> None:
+        self.symbols = not self.symbols
+        self._relabel()
 
     def set_scale(self, s: float) -> None:
         self.setStyleSheet(
@@ -685,6 +720,7 @@ class Keyboard(QFrame):
             f" QPushButton {{ font-size: {15 * s:.1f}pt; font-weight: 700; min-width: {44 * s:.0f}px;"
             f" min-height: {40 * s:.0f}px; border-radius: {8 * s:.0f}px; color: #e6e1ff;"
             " background: #221c3a; border: 2px solid transparent; }"
+            " QPushButton:checked { background: #3d2f6e; color: white; }"
             " QPushButton:focus { background: #6a4bb0; border-color: #b79cff; }")
         m = int(14 * s)
         self.layout().setContentsMargins(m, m, m, m)

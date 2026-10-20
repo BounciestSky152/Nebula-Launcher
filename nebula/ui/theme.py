@@ -517,6 +517,14 @@ HANDHELD = False  # fullscreen, bigger text and targets, gamepad navigation
 HANDHELD_QSS = """
 QPushButton#SidebarButton { min-height: 46px; }
 QPushButton:focus { border: 2px solid #b79cff; }
+*[controllerForm="true"] QCheckBox { padding: 4px 8px; border-radius: 6px; border: 2px solid transparent; }
+*[controllerForm="true"] QCheckBox:focus { background: rgba(140, 98, 212, 0.28); border-color: #b79cff; }
+*[controllerForm="true"] QComboBox, *[controllerForm="true"] QSpinBox, *[controllerForm="true"] QLineEdit
+    { min-height: 30px; }
+*[controllerForm="true"] QComboBox:focus, *[controllerForm="true"] QSpinBox:focus,
+*[controllerForm="true"] QLineEdit:focus, *[controllerForm="true"] QListWidget:focus
+    { border: 2px solid #b79cff; background: rgba(140, 98, 212, 0.18); }
+*[controllerForm="true"] QTabBar::tab:selected:focus { background: rgba(140, 98, 212, 0.35); border-radius: 6px; }
 """
 MODE = "nebula"  # "nebula" (space-styled sidebar, bundled fonts) | "classic" (the original look)
 CLASSIC_QSS = """

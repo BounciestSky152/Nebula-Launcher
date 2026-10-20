@@ -180,6 +180,7 @@ class MainWindow(QMainWindow):
             self._gamepad = handheld_mod.Gamepad(on_kind=self.pages["handheld"].set_controller)
             self._nav = handheld_mod.Navigation(self)
         app = QApplication.instance()
+        self.pages["settings"].set_handheld(on)
         if on:
             self._gamepad.start()
             app.installEventFilter(self._nav)
