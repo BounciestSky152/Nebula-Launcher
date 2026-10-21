@@ -32,6 +32,13 @@ GLASS = GLASS_DARK = GLASS_CARD = GLASS_BORDER = ""
 globals().update(PALETTES[PALETTE])
 
 QSS_TEMPLATE = """
+QListView#SearchPopup {{
+    background: {SURFACE};
+    color: {TEXT};
+    border: 1px solid {BORDER};
+    selection-background-color: {ACCENT_SOFT};
+    selection-color: {TEXT};
+}}
 * {{
     outline: none;
 }}

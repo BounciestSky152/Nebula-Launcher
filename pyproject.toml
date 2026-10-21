@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "super-nova-launcher"
-version = "1.3.12"
+version = "1.3.13"
 description = "A unified game launcher for Linux inspired by GOG Galaxy 2.0, with Proton for Windows games"
 readme = "README.md"
 requires-python = ">=3.10"

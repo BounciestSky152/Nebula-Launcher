@@ -800,6 +800,7 @@ class TopBar(QWidget):
         comp.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         comp.setFilterMode(Qt.MatchFlag.MatchContains)
         comp.setMaxVisibleItems(10)
+        comp.popup().setObjectName("SearchPopup")  # a separate window: styled explicitly for every theme
         comp.activated.connect(self._completed)
         self.search.setCompleter(comp)
         lay.addWidget(self.search)
