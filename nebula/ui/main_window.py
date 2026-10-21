@@ -19,6 +19,7 @@ from nebula.ui.friends import FriendsPanel
 from nebula.ui.pages.downloads import DownloadsPage
 from nebula.ui.pages.game import GamePage
 from nebula.ui.pages.handheld import HandheldGamePage, HandheldPage, HandheldProductPage
+from nebula.ui.pages.handheld_settings import HandheldSettingsPage
 from nebula.ui.pages.home import HomePage
 from nebula.ui.pages.library import LibraryPage
 from nebula.ui.pages.settings import SettingsPage
@@ -86,6 +87,7 @@ class MainWindow(QMainWindow):
             "handheld": HandheldPage(services, self.ctl, self),
             "handheld_game": HandheldGamePage(services, self.ctl, self),
             "handheld_product": HandheldProductPage(services, self.ctl, self),
+            "handheld_settings": HandheldSettingsPage(services, self.ctl, self),
         }
         for p in self.pages.values():
             self.stack.addWidget(p)
@@ -116,6 +118,8 @@ class MainWindow(QMainWindow):
             return
         if hasattr(self, "_nav"):
             self._nav.close_keyboard()
+        if page == "settings" and theme.HANDHELD and arg != "full":
+            page, arg = "handheld_settings", None  # the controller-first settings ("full": the desktop page)
         w = self.pages.get(page)
         if w is None:
             return

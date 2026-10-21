@@ -295,7 +295,7 @@ class HandheldPage(Page):
         """Show the prompts of the controller in use (PlayStation layout, otherwise Xbox)."""
         self.kind = kind
         self.prompts.set_items(PROMPTS.get(kind, PROMPTS["xbox"]))
-        for name in ("handheld_game", "handheld_product", "settings"):
+        for name in ("handheld_game", "handheld_product", "handheld_settings", "settings"):
             card = self.win.pages.get(name) if hasattr(self.win, "pages") else None
             if card is not None:
                 card.set_controller(kind)
@@ -656,6 +656,7 @@ class Keyboard(QFrame):
         super().__init__(parent)
         self.setObjectName("HHKeyboard")
         self.target, self.on_submit = target, on_submit
+        self.on_close = None  # instead of refocusing the target when B closes the keyboard
         self.shift = self.symbols = False
         grid = QGridLayout(self)
         grid.setSpacing(6)
@@ -737,7 +738,7 @@ class Keyboard(QFrame):
 
     def close_keyboard(self) -> None:
         self.hide()
-        self.target.setFocus()
+        (self.on_close or self.target.setFocus)()
 
     def _submit(self) -> None:
         self.hide()

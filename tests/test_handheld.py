@@ -43,7 +43,8 @@ def test_settings_with_a_controller(qapp, services, errors):
     def focused():
         return QApplication.focusWidget()
 
-    press(Qt.Key.Key_F10)  # Start / Select opens the settings
+    w.navigate("settings", "full")  # the desktop settings page, reached from Big Picture settings > About
+    pump(qapp)
     assert w.stack.currentWidget() is page and page.prompts.isVisible()
     assert isinstance(focused(), QTabBar)
 
@@ -131,3 +132,90 @@ def test_keyboard_layers(qapp):
     assert edit.text() == "qQ&/"
     assert kb.cells[1][6].text() == "&&"  # shown as a literal ampersand
     assert kb.submit_key.text() == "Done"
+
+
+def test_big_picture_settings(qapp, services, errors):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    from nebula.ui import theme
+    from nebula.ui.handheld import send_key
+    from nebula.ui.main_window import MainWindow
+    from nebula.ui.pages.handheld_settings import ChoiceRow, TextRow, ToggleRow
+
+    theme.apply(qapp)
+    services.settings.set("handheld.mode", "on")
+    w = MainWindow(services)
+    w.show()
+    w.activateWindow()
+    w.start_page()
+    pump(qapp)
+    for other in QApplication.topLevelWidgets():  # windows and dialogs left over by earlier tests take the keys
+        if other is not w and other.isVisible():
+            other.hide()
+    QApplication.setActiveWindow(w)
+    pump(qapp)
+    page = w.pages["handheld_settings"]
+
+    def press(key, seconds=0.12):
+        send_key(key)
+        pump(qapp, seconds)
+
+    def focused():
+        return QApplication.focusWidget()
+
+    press(Qt.Key.Key_F10)  # Start opens the controller settings, on the section list
+    assert w.stack.currentWidget() is page and focused() is page.cats[0]
+    press(Qt.Key.Key_Down)
+    assert page.index == 1 and focused() is page.cats[1]
+    press(Qt.Key.Key_PageUp)  # LB / RB jump between sections
+    assert page.index == 0
+
+    press(Qt.Key.Key_Right)  # into the rows
+    rows = page._rows()
+    assert focused() is rows[0]
+    toggle = next(r for r in rows if isinstance(r, ToggleRow) and r.key == "appearance.starfield")
+    while focused() is not toggle:
+        press(Qt.Key.Key_Down, 0.05)
+    before = services.settings.get("appearance.starfield")
+    press(Qt.Key.Key_Return)  # A flips a switch
+    assert services.settings.get("appearance.starfield") is (not before) and toggle.switch.on is (not before)
+    press(Qt.Key.Key_Return)
+    choice = rows[0]
+    assert isinstance(choice, ChoiceRow)
+    while focused() is not choice:
+        press(Qt.Key.Key_Up, 0.05)
+    start = services.settings.get("general.launch_behaviour")
+    press(Qt.Key.Key_Right)  # left/right change a choice
+    assert services.settings.get("general.launch_behaviour") != start
+    press(Qt.Key.Key_Left)
+    assert services.settings.get("general.launch_behaviour") == start
+
+    # text: A opens the editor with the keyboard; Done saves, B cancels
+    page._select(next(i for i, (t, _r) in enumerate(page.sections) if t == "Updates"))
+    branch = next(r for r in page._rows() if isinstance(r, TextRow) and r.key == "updates.branch")
+    page._focus_row(branch)
+    pump(qapp, 0.05)
+    press(Qt.Key.Key_Return)
+    assert page.editor.isVisible() and page.keyboard.isAncestorOf(focused())
+    assert page.edit.text() == services.settings.get("updates.branch")
+    press(Qt.Key.Key_Return)  # types the focused key ("q")
+    page.keyboard.submit_key.click()
+    pump(qapp)
+    assert not page.editor.isVisible() and focused() is branch
+    assert services.settings.get("updates.branch").endswith("q")
+    press(Qt.Key.Key_Return)
+    press(Qt.Key.Key_Return)
+    press(Qt.Key.Key_Escape)  # B: closes without saving
+    assert not page.editor.isVisible() and focused() is branch
+    assert services.settings.get("updates.branch").endswith("q") and not services.settings.get(
+        "updates.branch").endswith("qq")
+
+    press(Qt.Key.Key_Escape)  # B: rows -> sections -> back to Big Picture
+    assert focused() is page.cats[page.index]
+    press(Qt.Key.Key_Escape)
+    assert w.stack.currentWidget() is w.pages["handheld"]
+    services.settings.set("handheld.mode", "off")
+    pump(qapp)
+    w.close()
+    assert not errors
