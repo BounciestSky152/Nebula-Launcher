@@ -461,7 +461,7 @@ class SettingsPage(Page):
         compat = self.s.compat
         self.runner_list.clear()
         for r in compat.protons + compat.wines:
-            it = QListWidgetItem(icons.icon("proton" if r.kind == "proton" else "wine"),
+            it = QListWidgetItem(icons.icon("proton" if r.kind == "proton" else "wine", theme.TEXT_DIM),
                                  f"{r.name}    —  {r.origin}    {r.path}")
             it.setData(Qt.ItemDataRole.UserRole, r)
             self.runner_list.addItem(it)

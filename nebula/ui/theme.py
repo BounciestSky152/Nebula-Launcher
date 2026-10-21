@@ -1,7 +1,7 @@
 """GOG Galaxy 2.0-inspired themes: the dark Nebula (and Classic) and the light Super Nova."""
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QFont, QPalette
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPalette
 from PySide6.QtWidgets import QApplication
 
 # Nebula (and Classic) are dark; Super Nova is the light theme: a bright sky with every colour of an exploding star
@@ -15,13 +15,13 @@ PALETTES = {
         "GLASS": "rgba(16, 16, 20, 0.82)", "GLASS_DARK": "rgba(13, 13, 17, 0.88)",
         "GLASS_CARD": "rgba(26, 26, 32, 0.86)", "GLASS_BORDER": "rgba(255, 255, 255, 0.07)",
     },
-    "light": {
-        "BG": "#fbf6ff", "SIDEBAR": "#f4ecff", "SURFACE": "#ffffff", "SURFACE2": "#f6effe", "SURFACE3": "#ece0fb",
-        "BORDER": "#e6d8f6", "TEXT": "#1e1233", "TEXT_DIM": "#5a4d74", "TEXT_FAINT": "#8f84a8",
-        "ACCENT": "#e8338a", "ACCENT_HOVER": "#f2559f", "ACCENT_PRESSED": "#c41f6f", "ACCENT_SOFT": "#ffe3f0",
-        "SUCCESS": "#17a35b", "WARNING": "#e07a00", "DANGER": "#e0353f", "INFO": "#1e88e5",
-        "GLASS": "rgba(255, 255, 255, 0.78)", "GLASS_DARK": "rgba(255, 250, 255, 0.86)",
-        "GLASS_CARD": "rgba(255, 255, 255, 0.84)", "GLASS_BORDER": "rgba(120, 50, 170, 0.14)",
+    "light": {  # text colours keep >= 4.5:1 on the frosted glass; the bright colours live in the gradients below
+        "BG": "#fbf6ff", "SIDEBAR": "#f4ecff", "SURFACE": "#ffffff", "SURFACE2": "#f7f0ff", "SURFACE3": "#ebdffa",
+        "BORDER": "#e2d3f5", "TEXT": "#1e1233", "TEXT_DIM": "#54476e", "TEXT_FAINT": "#6f6390",
+        "ACCENT": "#db1a76", "ACCENT_HOVER": "#c2127a", "ACCENT_PRESSED": "#b00f63", "ACCENT_SOFT": "#ffe3f1",
+        "SUCCESS": "#0c8346", "WARNING": "#c05600", "DANGER": "#d42a3a", "INFO": "#0b78b8",
+        "GLASS": "rgba(255, 255, 255, 0.72)", "GLASS_DARK": "rgba(255, 251, 255, 0.84)",
+        "GLASS_CARD": "rgba(255, 255, 255, 0.76)", "GLASS_BORDER": "rgba(150, 70, 200, 0.18)",
     },
 }
 PALETTE = "dark"
@@ -541,18 +541,91 @@ QPushButton#SidebarButton:checked { background: #2c2142; }
 """
 
 
-# the light theme on top of the shared style sheet: buttons and highlights in supernova colours
+# Super Nova's colours, for style sheets and painted widgets alike
+NOVA = ("#7a2cf0", "#e5157f", "#ff6a1a")  # violet, hot pink, tangerine: what is "on" (deep enough for white text)
+SPECTRUM = ("#14b8e6", "#8a50ff", "#ff3d8b", "#ff862e", "#ffb600")  # the whole explosion, cyan to gold (no text on it)
+GOLD = ("#ffb600", "#ff6a1a")
+FLARE = ("#ffe1f0", "#f1e4ff", "#ffefd6")  # pastel pink, lilac and peach: soft highlights behind dark text
+
+
+def stops(colors) -> str:
+    """``colors`` as evenly spaced qlineargradient stops."""
+    return ", ".join(f"stop:{i / (len(colors) - 1):g} {c}" for i, c in enumerate(colors))
+
+
+def gradient(x1: float, y1: float, x2: float, y2: float, colors=NOVA, alpha: int = 255) -> QLinearGradient:
+    """A painter gradient through ``colors``, for the light theme's painted accents."""
+    g = QLinearGradient(x1, y1, x2, y2)
+    for i, c in enumerate(colors):
+        col = QColor(c)
+        col.setAlpha(alpha)
+        g.setColorAt(i / (len(colors) - 1), col)
+    return g
+
+
+# the light theme on top of the shared style sheet: everything that is on, selected or in focus burns in supernova
+# colours; text stays dark on light glass
 SUPERNOVA_QSS = """
-QPushButton#Primary, QPushButton[primary="true"] {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff3d8b, stop:0.55 #ff7a3d, stop:1 #ffb000);
-    color: white; border: none;
-}
-QPushButton#Primary:hover, QPushButton[primary="true"]:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff5aa0, stop:0.55 #ff9257, stop:1 #ffc233);
-}
-QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7b2ff7, stop:0.5 #ff3d8b,
-    stop:1 #ffb000); }
-"""
+QPushButton#Primary, QPushButton[primary="true"], QPushButton#GogSignIn, QPushButton#PlayButton {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, {nova});
+    color: white;
+    border: none;
+}}
+QPushButton#Primary:hover, QPushButton[primary="true"]:hover, QPushButton#GogSignIn:hover,
+QPushButton#PlayButton:hover {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #8c45ff, stop:0.5 #f02a8e, stop:1 #ff7d33);
+}}
+QPushButton#Primary:pressed, QPushButton#PlayButton:pressed {{ background: {ACCENT_PRESSED}; }}
+QPushButton#Primary:disabled {{ background: {SURFACE3}; color: {TEXT_FAINT}; }}
+QPushButton#PlayButton[state="running"] {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0c8346, stop:1 #0b7d86);
+}}
+QPushButton#PlayButton[state="update"] {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, {gold}); color: #2b1400; }}
+QPushButton#PlayButton[state="busy"] {{ background: {SURFACE3}; color: {TEXT}; }}
+QPushButton#PlayMenu {{ background: #e2560c; }}
+QPushButton#PlayMenu:hover {{ background: #ff6a1a; }}
+QPushButton#Danger:hover {{ background: #ffe4e7; }}
+QPushButton:checked, QPushButton#Chip:checked {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {flare});
+    border-color: {ACCENT};
+}}
+QPushButton#Chip, #FeatureChip {{ background: rgba(255, 255, 255, 0.72); }}
+#Badge {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, {nova}); }}
+#BrandSub {{ color: {ACCENT}; }}
+#TopBar {{ border-bottom: 1px solid qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(138, 80, 255, 0.35),
+    stop:0.5 rgba(255, 61, 139, 0.35), stop:1 rgba(255, 182, 0, 0.35)); }}
+#UpdateBanner {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(138, 80, 255, 0.16),
+        stop:0.5 rgba(255, 61, 139, 0.14), stop:1 rgba(255, 182, 0, 0.18));
+    border-bottom: 1px solid rgba(229, 21, 127, 0.3);
+}}
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus, QLineEdit#SearchBox:focus {{
+    border-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, {nova});
+}}
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {{ border-color: {ACCENT}; }}
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, {nova});
+    border-color: {ACCENT};
+}}
+QSlider::sub-page:horizontal {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {spectrum}); }}
+QSlider::handle:horizontal {{ background: white; border: 3px solid {ACCENT}; width: 8px; }}
+QProgressBar::chunk {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {spectrum}); }}
+QProgressBar#Achievements::chunk {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {gold}); }}
+QTabBar::tab:hover {{ color: {ACCENT_HOVER}; }}
+QTabBar::tab:selected {{
+    color: {TEXT};
+    border-bottom: 2px solid qlineargradient(x1:0, y1:0, x2:1, y2:0, {nova});
+}}
+QListWidget::item:selected, QTreeWidget::item:selected, QMenu::item:selected {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {flare});
+    color: {TEXT};
+}}
+QComboBox QAbstractItemView {{ selection-color: {TEXT}; }}
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{ background: rgba(122, 44, 240, 0.2); }}
+QScrollBar::handle:vertical:hover {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, {nova}); }}
+QScrollBar::handle:horizontal:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {nova}); }}
+QDialog {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #fff5fa, stop:0.5 #f8f1ff, stop:1 #eef6ff); }}
+""".format(nova=stops(NOVA), spectrum=stops(SPECTRUM), gold=stops(GOLD), flare=stops(FLARE), **PALETTES["light"])
 
 
 def classic() -> bool:

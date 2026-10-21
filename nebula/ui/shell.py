@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import random
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, QStringListModel, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, QStringListModel, Qt, QTimer, Signal
 from PySide6.QtGui import (QBrush, QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen,
                            QPixmap, QRadialGradient)
 from PySide6.QtWidgets import (QButtonGroup, QCompleter, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton,
@@ -21,6 +21,21 @@ STATS_ENABLED = False  # the statistics page is switched off for now
 NODE_X = 12  # x of the orbit line the sidebar items hang on
 ITEM_TEXT, ITEM_TEXT_ON = "#b4aed6", "#ffffff"
 ITEM_ICON, ITEM_ICON_ON = "#8f88bd", "#e2d6ff"
+# Super Nova (the light theme): dark, readable labels on a pearly sidebar; the colour is in the painting around them
+NOVA = [QColor(255, 61, 139), QColor(255, 134, 46), QColor(255, 182, 0), QColor(20, 184, 166), QColor(138, 80, 255),
+        QColor(40, 140, 250)]  # hot pink, tangerine, gold, turquoise, violet, blue
+NOVA_TEXT, NOVA_ICON, NOVA_DIM = "#3a2a5c", "#8a4fd8", QColor(104, 86, 140)
+NOVA_PILL = [QColor(214, 22, 122), QColor(138, 47, 230), QColor(64, 92, 240)]  # deep enough for white text
+SIDEBAR_NOVA_QSS = """
+QPushButton#SidebarTool, QPushButton#SidebarAdd {
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(232, 51, 138, 0.24);
+}
+QPushButton#SidebarTool:hover, QPushButton#SidebarAdd:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(255, 61, 139, 0.16), stop:1 rgba(255, 182, 0, 0.16));
+    border-color: rgba(232, 51, 138, 0.6);
+}
+"""
 
 
 def _sparkle(p: QPainter, c: QPointF, r: float, color: QColor) -> None:
@@ -63,17 +78,19 @@ class SectionHeader(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         y = self.height() - 9
         x0 = 8 if theme.classic() else NODE_X + self.indent
-        if not theme.classic():
-            _sparkle(p, QPointF(x0, y - 3.5), 4.2, LAVENDER)
+        light = theme.light()
+        ink = NOVA_DIM if light else QColor(141, 134, 186)
+        if not theme.classic():  # Super Nova gives every section a sparkle of its own colour
+            _sparkle(p, QPointF(x0, y - 3.5), 4.2, NOVA[sum(map(ord, self._text)) % len(NOVA)] if light else LAVENDER)
         f = theme.font("display", 7.6)
         f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 2.4)
         p.setFont(f)
-        p.setPen(QColor(141, 134, 186))
+        p.setPen(ink)
         p.drawText(QPointF(x0 + 10, y), self._text)
         x = x0 + 10 + p.fontMetrics().horizontalAdvance(self._text) + 8
         line = QLinearGradient(x, 0, self.width() - 14, 0)
-        line.setColorAt(0, QColor(183, 156, 255, 90))
-        line.setColorAt(1, QColor(183, 156, 255, 0))
+        line.setColorAt(0, QColor(255, 61, 139, 110) if light else QColor(183, 156, 255, 90))
+        line.setColorAt(1, QColor(138, 80, 255, 0) if light else QColor(183, 156, 255, 0))
         if not theme.classic():
             p.fillRect(QRectF(x, y - 3.5, max(0, self.width() - 34 - x), 1), line)
         # fold arrow at the right
@@ -87,7 +104,7 @@ class SectionHeader(QWidget):
             arrow.moveTo(ax - 4, ay - 2)
             arrow.lineTo(ax, ay + 2.5)
             arrow.lineTo(ax + 4, ay - 2)
-        p.setPen(QPen(QColor(141, 134, 186), 1.4))
+        p.setPen(QPen(ink, 1.4))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawPath(arrow)
 
@@ -103,14 +120,15 @@ class BrandMark(QWidget):
     def paintEvent(self, _e):  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        light = theme.light()  # Super Nova: a hot planet with a golden ring, the name in magenta, orange and gold
         c = QPointF(34, 32)
         halo = QRadialGradient(c, 26)
-        halo.setColorAt(0, QColor(140, 100, 255, 70))
-        halo.setColorAt(1, QColor(140, 100, 255, 0))
+        halo.setColorAt(0, QColor(255, 61, 139, 80) if light else QColor(140, 100, 255, 70))
+        halo.setColorAt(1, QColor(255, 182, 0, 0) if light else QColor(140, 100, 255, 0))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(halo)
         p.drawEllipse(c, 26, 26)
-        ring = QPen(QColor(205, 190, 255, 170), 1.6)
+        ring = QPen(QColor(255, 150, 20, 220) if light else QColor(205, 190, 255, 170), 1.6)
         p.save()  # back half of the ring, behind the planet
         p.translate(c)
         p.rotate(-22)
@@ -119,9 +137,9 @@ class BrandMark(QWidget):
         p.drawArc(QRectF(-19, -6, 38, 12), 0, 180 * 16)
         p.restore()
         body = QLinearGradient(c.x() - 10, c.y() - 10, c.x() + 10, c.y() + 10)
-        body.setColorAt(0, QColor(196, 168, 255))
-        body.setColorAt(0.55, QColor(122, 82, 214))
-        body.setColorAt(1, QColor(46, 70, 160))
+        for at, dark, nova in ((0, QColor(196, 168, 255), QColor(255, 214, 90)), (0.55, QColor(122, 82, 214), NOVA[0]),
+                               (1, QColor(46, 70, 160), NOVA[4])):
+            body.setColorAt(at, nova if light else dark)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(body)
         p.drawEllipse(c, 10.5, 10.5)
@@ -132,7 +150,7 @@ class BrandMark(QWidget):
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawArc(QRectF(-19, -6, 38, 12), 180 * 16, 180 * 16)
         p.restore()
-        _sparkle(p, QPointF(52, 15), 3, QColor(255, 255, 255, 220))
+        _sparkle(p, QPointF(52, 15), 3, QColor(255, 160, 0) if light else QColor(255, 255, 255, 220))
         size, name = 15.0, APP_NAME.upper()
         while True:  # the name in the biggest lettering that fits beside the planet
             f = theme.font("display", size)
@@ -143,16 +161,23 @@ class BrandMark(QWidget):
             size -= 0.5
         path = QPainterPath()
         path.addText(QPointF(62, 33), f, name)
-        g = QLinearGradient(62, 16, 200, 34)
-        g.setColorAt(0, QColor(255, 255, 255))
-        g.setColorAt(0.55, QColor(206, 188, 255))
-        g.setColorAt(1, QColor(126, 206, 255))
+        if light:
+            g = QLinearGradient(62, 16, 62 + QFontMetricsF(f).horizontalAdvance(name), 34)
+            g.setColorAt(0, QColor(214, 21, 127))
+            g.setColorAt(0.55, QColor(240, 83, 28))
+            g.setColorAt(1, QColor(214, 128, 0))
+            p.fillPath(path.translated(0, 1), QColor(120, 30, 90, 40))  # a soft shadow keeps it crisp on pearl
+        else:
+            g = QLinearGradient(62, 16, 200, 34)
+            g.setColorAt(0, QColor(255, 255, 255))
+            g.setColorAt(0.55, QColor(206, 188, 255))
+            g.setColorAt(1, QColor(126, 206, 255))
         p.fillPath(path, g)
         f = theme.font("sidebar", 6.4)
         f.setWeight(QFont.Weight.Bold)
         f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 3.2)
         p.setFont(f)
-        p.setPen(QColor(141, 134, 186))
+        p.setPen(NOVA_DIM if light else QColor(141, 134, 186))
         p.drawText(QPointF(63, 47), "GOG LAUNCHER")
 
 
@@ -202,18 +227,20 @@ class OrbitPanel(QWidget):
         for a, b in zip(pts, pts[1:]):  # smooth through the nodes
             mid = (a.y() + b.y()) / 2
             path.cubicTo(QPointF(a.x(), mid), QPointF(b.x(), mid), b)
+        light = theme.light()
         line = QLinearGradient(0, pts[0].y(), 0, pts[-1].y())
-        line.setColorAt(0, QColor(183, 156, 255, 110))
-        line.setColorAt(0.5, QColor(140, 170, 255, 70))
-        line.setColorAt(1, QColor(110, 200, 255, 25))
-        p.setPen(QPen(QBrush(line), 1.1))
+        for at, dark, nova in ((0, QColor(183, 156, 255, 110), QColor(255, 61, 139, 150)),
+                               (0.5, QColor(140, 170, 255, 70), QColor(255, 134, 46, 120)),
+                               (1, QColor(110, 200, 255, 25), QColor(138, 80, 255, 70))):
+            line.setColorAt(at, nova if light else dark)
+        p.setPen(QPen(QBrush(line), 1.3 if light else 1.1))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawPath(path)
         p.setPen(Qt.PenStyle.NoPen)
-        for pt, (_y, w) in zip(pts, nodes):
+        for i, (pt, (_y, w)) in enumerate(zip(pts, nodes)):
             if isinstance(w, SidebarButton) and not w.isChecked():
-                p.setBrush(QColor(200, 185, 255, 150))
-                p.drawEllipse(pt, 1.7, 1.7)
+                p.setBrush(NOVA[i % len(NOVA)] if light else QColor(200, 185, 255, 150))  # Super Nova: every colour
+                p.drawEllipse(pt, 2.1 if light else 1.7, 2.1 if light else 1.7)
 
 
 class SidebarButton(QPushButton):
@@ -232,6 +259,7 @@ class SidebarButton(QPushButton):
         self.ic.setScaledContents(False)
         self._icon_name = icon_name
         self._pixmap = pixmap
+        self._badge = 0
         self.text_lbl = QLabel(text)
         self.count = QLabel("")
         self.count.setStyleSheet(f"color:{theme.TEXT_FAINT}; font-size: 8pt;")
@@ -251,13 +279,32 @@ class SidebarButton(QPushButton):
         self._paint_icon()
 
     def _paint_icon(self) -> None:
-        on = self.isChecked()
+        on, light = self.isChecked(), theme.light()
+        self._light = light  # the theme the label and icon are coloured for
         if self._pixmap is not None:
             self.ic.setPixmap(self._pixmap)
         elif self._icon_name:
-            self.ic.setPixmap(icons.pixmap(self._icon_name, 18, ITEM_ICON_ON if on else ITEM_ICON))
-        self.text_lbl.setStyleSheet(f"background: transparent; color: {ITEM_TEXT_ON if on else ITEM_TEXT}; "
-                                    f"font-weight: {800 if on else 700};")
+            colour = ("#ffffff" if on else NOVA_ICON) if light else ITEM_ICON_ON if on else ITEM_ICON
+            self.ic.setPixmap(icons.pixmap(self._icon_name, 18, colour))
+        text = ("#ffffff" if on else NOVA_TEXT) if light else ITEM_TEXT_ON if on else ITEM_TEXT
+        self.text_lbl.setStyleSheet(f"background: transparent; color: {text}; font-weight: {800 if on else 700};")
+        self._style_count()
+
+    def _style_count(self) -> None:
+        on, light = self.isChecked(), theme.light()
+        if self._badge:  # a small pill
+            bg, fg = ((("white" if on else "rgba(232, 51, 138, 0.14)"), "#b0105f") if light
+                      else ("rgba(183, 156, 255, 0.24)", "#ece6ff"))
+            self.count.setStyleSheet(f"background: {bg}; color: {fg}; border-radius: 8px; font-size: 7.5pt; "
+                                     "font-weight: 700; padding: 0 5px;")
+        else:  # on Super Nova's selected pill the count is white too
+            self.count.setStyleSheet(f"color:{'rgba(255, 255, 255, 0.82)' if light and on else theme.TEXT_FAINT}; "
+                                     "font-size: 8pt; background: transparent;")
+
+    def changeEvent(self, e):  # noqa: N802
+        super().changeEvent(e)
+        if e.type() == QEvent.Type.StyleChange and getattr(self, "_light", None) not in (None, theme.light()):
+            self._paint_icon()  # the theme switched
 
     def enterEvent(self, e):  # noqa: N802
         super().enterEvent(e)
@@ -278,6 +325,8 @@ class SidebarButton(QPushButton):
         r = QRectF(self.rect()).adjusted(NODE_X + 8.5 + self.indent, 2.5, -10.5, -2.5)
         path = QPainterPath()
         path.addRoundedRect(r, r.height() / 2, r.height() / 2)
+        if theme.light():
+            return self._paint_nova(p, r, path, on)
         if not on:
             p.fillPath(path, QColor(255, 255, 255, 12))
             p.setPen(QPen(QColor(255, 255, 255, 18), 1))
@@ -302,22 +351,51 @@ class SidebarButton(QPushButton):
         p.drawEllipse(star, 7, 7)
         _sparkle(p, star, 3.2, QColor(255, 255, 255))
 
+    def _paint_nova(self, p: QPainter, r: QRectF, path: QPainterPath, on: bool) -> None:
+        """Super Nova: a soft pink hover, and a vivid magenta-violet-blue pill with a golden star when selected."""
+        if not on:
+            p.fillPath(path, QColor(255, 61, 139, 22))
+            p.setPen(QPen(QColor(255, 61, 139, 60), 1))
+            p.drawPath(path)
+            return
+        fill = QLinearGradient(r.left(), 0, r.right(), 0)
+        for i, c in enumerate(NOVA_PILL):
+            fill.setColorAt(i / (len(NOVA_PILL) - 1), c)
+        p.fillPath(path, fill)
+        shine = QLinearGradient(0, r.top(), 0, r.bottom())  # a glossy top half
+        shine.setColorAt(0, QColor(255, 255, 255, 70))
+        shine.setColorAt(0.5, QColor(255, 255, 255, 0))
+        p.fillPath(path, shine)
+        edge = QLinearGradient(r.left(), 0, r.right(), 0)
+        edge.setColorAt(0, QColor(255, 196, 64, 230))
+        edge.setColorAt(1, QColor(255, 196, 64, 0))
+        p.setPen(QPen(QBrush(edge), 1))
+        p.drawPath(path)
+        star = QPointF(NODE_X + self.indent, r.center().y())
+        glow = QRadialGradient(star, 8)
+        glow.setColorAt(0, QColor(255, 196, 40, 240))
+        glow.setColorAt(0.5, QColor(255, 134, 46, 120))
+        glow.setColorAt(1, QColor(255, 61, 139, 0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(glow)
+        p.drawEllipse(star, 8, 8)
+        _sparkle(p, star, 3.6, QColor(255, 255, 255))
+
     def set_count(self, n) -> None:
         self.count.setText(str(n) if n else "")
 
     def set_badge(self, n: int) -> None:
+        self._badge = n
         if n:  # a small pill, not a full-height block
             self.count.setText(str(n))
             self.count.setFixedHeight(16)
             self.count.setMinimumWidth(18)
             self.count.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.count.setStyleSheet("background: rgba(183, 156, 255, 0.24); color: #ece6ff; border-radius: 8px; "
-                                     "font-size: 7.5pt; font-weight: 700; padding: 0 5px;")
         else:
             self.count.setText("")
             self.count.setMinimumSize(0, 0)
             self.count.setMaximumHeight(16777215)
-            self.count.setStyleSheet(f"color:{theme.TEXT_FAINT}; font-size: 8pt; background: transparent;")
+        self._style_count()
 
     def set_syncing(self, on: bool) -> None:
         if on:
@@ -372,7 +450,7 @@ class Sidebar(QWidget):
         outer.addLayout(self.tools)
         bottom = QHBoxLayout()
         bottom.setContentsMargins(12, 8, 12, 14)
-        add = QPushButton("  Add games && friends")
+        add = self.add_btn = QPushButton("  Add games && friends")
         add.setObjectName("SidebarAdd")
         add.setIcon(icons.icon("plus", theme.TEXT))
         add.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -392,9 +470,24 @@ class Sidebar(QWidget):
         self._count_timer.setInterval(300)
         self._count_timer.timeout.connect(self.update_counts)
         self.update_counts()
+        self._light = False
+        self._restyle()
 
 
-    # deep-space backdrop: drawn once per size, nothing animates here
+    def changeEvent(self, e):  # noqa: N802
+        super().changeEvent(e)
+        if e.type() == QEvent.Type.StyleChange and hasattr(self, "_light"):
+            self._restyle()
+
+    def _restyle(self) -> None:
+        """Follow the theme: Super Nova has a pearly backdrop and tool buttons."""
+        if self._light != theme.light():
+            self._light = theme.light()
+            self._bg = None
+            self.setStyleSheet(SIDEBAR_NOVA_QSS if self._light else "")
+            self.add_btn.setIcon(icons.icon("plus", theme.TEXT))
+
+    # deep-space backdrop (Super Nova: frosted pearl): drawn once per size, nothing animates here
     def resizeEvent(self, e):  # noqa: N802
         super().resizeEvent(e)
         self._bg = None
@@ -416,6 +509,8 @@ class Sidebar(QWidget):
         dpr = self.devicePixelRatioF() or 1.0
         pm = QPixmap(int(w * dpr), int(h * dpr))
         pm.setDevicePixelRatio(dpr)
+        if theme.light():
+            return self._render_nova_bg(pm, w, h)
         p = QPainter(pm)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         sky = QLinearGradient(0, 0, 0, h)
@@ -441,6 +536,43 @@ class Sidebar(QWidget):
         edge.setColorAt(0.5, QColor(150, 120, 230, 25))
         edge.setColorAt(1, QColor(150, 120, 230, 0))
         p.fillRect(QRectF(w - 1, 0, 1, h), edge)
+        p.end()
+        return pm
+
+    @staticmethod
+    def _render_nova_bg(pm: QPixmap, w: int, h: int) -> QPixmap:
+        """Frosted pearl over the bright sky, with a soft glow of every colour of the supernova."""
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        frost = QLinearGradient(0, 0, 0, h)
+        frost.setColorAt(0, QColor(255, 252, 255, 228))
+        frost.setColorAt(0.5, QColor(250, 245, 255, 214))
+        frost.setColorAt(1, QColor(255, 247, 242, 228))
+        p.fillRect(QRectF(0, 0, w, h), frost)
+        p.setPen(Qt.PenStyle.NoPen)
+        for cx, cy, r, col in ((w * 0.12, 30, 210, QColor(255, 61, 139, 50)), (w * 0.95, 80, 170, QColor(255, 182, 0, 50)),
+                               (0, h * 0.5, 240, QColor(138, 80, 255, 34)), (w, h * 0.78, 230, QColor(20, 184, 166, 34)),
+                               (w * 0.3, h, 230, QColor(255, 134, 46, 40))):
+            glow = QRadialGradient(QPointF(cx, cy), r)
+            glow.setColorAt(0, col)
+            glow.setColorAt(1, QColor(col.red(), col.green(), col.blue(), 0))
+            p.setBrush(glow)
+            p.drawEllipse(QPointF(cx, cy), r, r)
+        rnd = random.Random(11)
+        for _ in range(int(w * h / 3000)):  # tiny coloured stars
+            mag = rnd.random() ** 3
+            c = QColor(rnd.choice(NOVA))
+            c.setAlpha(int(50 + mag * 150))
+            p.setBrush(c)
+            r = 0.4 + mag * 0.8
+            p.drawEllipse(QPointF(rnd.uniform(0, w), rnd.uniform(0, h)), r, r)
+        edge = QLinearGradient(0, 0, 0, h)  # the lit edge towards the content, in supernova colours
+        edge.setColorAt(0, QColor(255, 61, 139, 150))
+        edge.setColorAt(0.4, QColor(255, 134, 46, 90))
+        edge.setColorAt(0.75, QColor(138, 80, 255, 60))
+        edge.setColorAt(1, QColor(20, 184, 166, 40))
+        p.fillRect(QRectF(w - 1.5, 0, 1.5, h), edge)
         p.end()
         return pm
 
@@ -661,7 +793,7 @@ class TopBar(QWidget):
         self.search.setToolTip("Search your library and the GOG store (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(380)
-        self.search.addAction(icons.icon("search"), QLineEdit.ActionPosition.LeadingPosition)
+        self._search_icon = self.search.addAction(icons.icon("search"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.returnPressed.connect(lambda: self.search_submitted.emit(self.search.text().strip()))
         self._titles = QStringListModel()
         comp = QCompleter(self._titles, self)
@@ -727,6 +859,33 @@ class TopBar(QWidget):
         services.bus.integration_changed.connect(lambda _i: self.refresh_profile())
         self._update_titles()
         self.refresh_profile()
+        self._light = False
+        self._restyle()
+
+    def changeEvent(self, e):  # noqa: N802
+        super().changeEvent(e)
+        if e.type() == QEvent.Type.StyleChange and hasattr(self, "_light"):
+            self._restyle()
+
+    def _restyle(self) -> None:
+        """Follow the theme: icons in its colours (Super Nova's are dark on light glass, the friends one pink)."""
+        if self._light != theme.light():
+            self._light = theme.light()
+            for b, name in ((self.back, "back"), (self.fwd, "forward"), (self.sync, "refresh"),
+                            (self.settings_btn, "settings")):
+                b.setIcon(icons.icon(name, theme.TEXT_DIM))
+            self._search_icon.setIcon(icons.icon("search", theme.TEXT_DIM))
+            self.friends.setIcon(icons.icon("users", theme.TEXT_DIM, theme.ACCENT_PRESSED if self._light else None))
+            self._downloads()
+
+    def paintEvent(self, e):  # noqa: N802
+        super().paintEvent(e)
+        if theme.light():  # Super Nova: a thin band of the supernova's colours along the bottom edge
+            p = QPainter(self)
+            band = QLinearGradient(0, 0, self.width(), 0)
+            for i, c in enumerate(NOVA[:5]):
+                band.setColorAt(i / 4, QColor(c.red(), c.green(), c.blue(), 150))
+            p.fillRect(QRectF(0, self.height() - 1.5, self.width(), 1.5), band)
 
     def refresh_profile(self) -> None:
         gog = self.s.integrations.get("gog")
@@ -794,7 +953,7 @@ class TopBar(QWidget):
             self.dl.setIcon(icons.icon("download", theme.ACCENT_HOVER))
         else:
             self.dl.setText("")
-            self.dl.setIcon(icons.icon("download"))
+            self.dl.setIcon(icons.icon("download", theme.TEXT_DIM))
 
     def _friends(self) -> None:
         n = self.s.friends.online_count()

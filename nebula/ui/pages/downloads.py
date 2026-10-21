@@ -110,7 +110,7 @@ class JobRow(QWidget):
         if hasattr(self, "pause"):
             from nebula.ui import icons
 
-            self.pause.setIcon(icons.icon("play" if j.state == "paused" else "pause"))
+            self.pause.setIcon(icons.icon("play" if j.state == "paused" else "pause", theme.TEXT_DIM))
             self.pause.setToolTip("Resume" if j.state == "paused" else "Pause")
         if self.spark is not None:
             self.spark.set_values(j.speed_history)

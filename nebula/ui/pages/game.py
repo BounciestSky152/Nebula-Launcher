@@ -590,8 +590,9 @@ class GamePage(Page):
         if state == "not_installed" and not self.s.integration(e.primary.source).supports(base.INSTALL):
             text = "UNAVAILABLE"
         self.play.setText(text)
+        ink = "#2b1400" if theme.light() and state == "update" else "white"  # Super Nova's update is gold
         self.play.setIcon(icons.icon({"running": "stop", "installed": "play", "update": "download",
-                                      "not_installed": "download"}.get(state, "play"), "white"))
+                                      "not_installed": "download"}.get(state, "play"), ink))
         self.play.setProperty("state", prop)
         self.play.style().unpolish(self.play)
         self.play.style().polish(self.play)
@@ -619,7 +620,7 @@ class GamePage(Page):
             parts = ["Paused"] + parts[:1]
         self.job_sub.setText("   •   ".join(parts))
         self.job_pause.setVisible(job.can_pause)
-        self.job_pause.setIcon(icons.icon("play" if job.state == "paused" else "pause"))
+        self.job_pause.setIcon(icons.icon("play" if job.state == "paused" else "pause", theme.TEXT_DIM))
 
     def _toggle_pause(self) -> None:
         job = next((self.s.jobs.active_for(g.uid) for g in self.entry.games if self.s.jobs.active_for(g.uid)), None)

@@ -112,16 +112,17 @@ class CoverDelegate(QStyledItemDelegate):
         else:
             p.drawPixmap(cover, placeholder_pixmap(cover.size(), entry.title))
         installed = entry.installed
-        if not installed:
-            p.fillRect(cover, QColor(0, 0, 0, 70))
+        light = theme.light()
+        if not installed:  # faded: dimmed on the dark sky, washed out on Super Nova's bright one
+            p.fillRect(cover, QColor(255, 255, 255, 80) if light else QColor(0, 0, 0, 70))
         launcher = self.s.launcher
         running = launcher.entry_running(entry)
         job = next((self.s.jobs.active_for(g.uid) for g in entry.games if self.s.jobs.active_for(g.uid)), None)
         if hovered:
-            p.fillRect(cover, QColor(10, 10, 14, 120))
+            p.fillRect(cover, QColor(46, 14, 72, 110) if light else QColor(10, 10, 14, 120))
             pr = self._play_rect(cover)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(theme.ACCENT))
+            p.setBrush(theme.gradient(pr.left(), pr.top(), pr.right(), pr.bottom()) if light else QColor(theme.ACCENT))
             p.drawEllipse(pr)
             name = "stop" if running else ("play" if installed else "download")
             ic = icons.pixmap(name, pr.width() // 2, "white")
@@ -130,7 +131,8 @@ class CoverDelegate(QStyledItemDelegate):
             bar = QRect(cover.x(), cover.bottom() - 26, cover.width(), 26)
             p.fillRect(bar, QColor(0, 0, 0, 180))
             prog = QRect(bar.x(), bar.bottom() - 3, int(bar.width() * job.progress), 4)
-            p.fillRect(prog, QColor(theme.ACCENT))
+            p.fillRect(prog, theme.gradient(prog.left(), 0, prog.right(), 0, theme.SPECTRUM) if light
+                       else QColor(theme.ACCENT))
             p.setPen(QColor("white"))
             f = QFont(p.font())
             f.setPointSizeF(8)
@@ -153,13 +155,14 @@ class CoverDelegate(QStyledItemDelegate):
             pp = QPainterPath()
             pp.addRoundedRect(QRectF(r), 4, 4)
             p.fillPath(pp, QColor(pill[1]))
-            p.setPen(QColor("#111"))
+            p.setPen(QColor("white" if light else "#111"))  # Super Nova's green and orange are deep ones
             p.drawText(r, Qt.AlignmentFlag.AlignCenter, pill[0])
         if entry.user.favorite:
             p.drawPixmap(cover.right() - 22, cover.y() + 6, icons.pixmap("heart", 16, theme.DANGER))
         p.setClipping(False)
         if hovered or selected:
-            p.setPen(QPen(QColor(theme.ACCENT), 2))
+            p.setPen(QPen(theme.gradient(cover.left(), cover.top(), cover.right(), cover.bottom()) if light
+                          else QColor(theme.ACCENT), 2))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRoundedRect(QRectF(cover).adjusted(1, 1, -1, -1), 6, 6)
         # caption

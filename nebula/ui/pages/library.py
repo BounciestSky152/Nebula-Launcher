@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLineEdit, QMenu, QSlider
                                QWidget)
 
 from nebula.core.library import SORT_LABELS, LibraryFilter
-from nebula.ui import icons
+from nebula.ui import icons, theme
 from nebula.ui.dialogs.misc import TextInputDialog
 from nebula.ui.pages.base import Page
 from nebula.ui.widgets.common import FlowLayout, button, clear_layout, icon_button, label, tool_button
@@ -47,7 +47,7 @@ class LibraryPage(Page):
         self.search.setPlaceholderText("Filter by title, tag or developer")
         self.search.setClearButtonEnabled(True)
         self.search.setMaximumWidth(320)
-        self.search.addAction(icons.icon("search"), QLineEdit.ActionPosition.LeadingPosition)
+        self.search.addAction(icons.icon("search", theme.TEXT_DIM), QLineEdit.ActionPosition.LeadingPosition)
         self.search.textChanged.connect(self._text_changed)
         bar.addWidget(self.search)
         self.filter_btn = tool_button("filter", "Filters")

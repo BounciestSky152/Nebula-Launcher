@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QDialog, QHBoxLayout, QLineEdit, QStackedWidget, Q
 
 from nebula.core import tasks
 from nebula.core.utils import xdg_open
+from nebula.ui import theme
 from nebula.ui.widgets.common import Spinner, button, label
 
 try:  # QtWebEngine is optional (PySide6-Addons)
@@ -87,7 +88,7 @@ class GogLoginDialog(QDialog):
 
     def _err(self, exc) -> None:
         self.spinner.stop()
-        self.status.setText(f"<span style='color:#e25c5c'>Sign-in failed: {exc}</span>")
+        self.status.setText(f"<span style='color:{theme.DANGER}'>Sign-in failed: {exc}</span>")
         if HAVE_WEBENGINE:
             self.web.show()
             self.web.load(QUrl(self.gog.login_url))

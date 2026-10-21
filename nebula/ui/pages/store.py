@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QHBoxLayout, QLineEdit, QListView, QScrollArea,
                                QStyle, QStyledItemDelegate, QVBoxLayout, QWidget)
 
@@ -120,7 +120,8 @@ class StoreDelegate(QStyledItemDelegate):
             p.drawText(tr, Qt.AlignmentFlag.AlignCenter, tag[0])
         p.setClipping(False)
         if hovered:
-            p.setPen(QColor(theme.ACCENT))
+            p.setPen(QPen(theme.gradient(r.left(), r.top(), r.right(), r.bottom()), 2) if theme.light()
+                     else QColor(theme.ACCENT))
             p.drawRoundedRect(QRectF(r).adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
         f = QFont(p.font())
         f.setPointSizeF(10)
@@ -141,7 +142,7 @@ class StoreDelegate(QStyledItemDelegate):
             dp = QPainterPath()
             dp.addRoundedRect(QRectF(dr), 3, 3)
             p.fillPath(dp, QColor(theme.SUCCESS))
-            p.setPen(QColor("#0d1f12"))
+            p.setPen(QColor("white" if theme.light() else "#0d1f12"))  # Super Nova's green is a deep one
             p.drawText(dr, Qt.AlignmentFlag.AlignCenter, price["discount"])
         p.setPen(QColor(theme.TEXT))
         p.drawText(QRect(r.right() - 90, y, 90, 20), Qt.AlignmentFlag.AlignRight,
@@ -243,7 +244,7 @@ class StorePage(Page):
         self.search.setPlaceholderText("Search the store")
         self.search.setClearButtonEnabled(True)
         self.search.setMaximumWidth(360)
-        self.search.addAction(icons.icon("search"), QLineEdit.ActionPosition.LeadingPosition)
+        self.search.addAction(icons.icon("search", theme.TEXT_DIM), QLineEdit.ActionPosition.LeadingPosition)
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
         self._debounce.setInterval(450)

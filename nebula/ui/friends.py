@@ -1,7 +1,8 @@
 """Friends side panel (Galaxy's right-hand friends list)."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QRadialGradient
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLineEdit, QScrollArea, QVBoxLayout, QWidget
 
 from nebula.core.utils import relative_time, xdg_open
@@ -9,6 +10,7 @@ from nebula.ui import icons, theme
 from nebula.ui.widgets.common import Avatar, Spinner, clear_layout, icon_button, label, status_color
 
 STATUS_TEXT = {"online": "Online", "away": "Away", "busy": "Busy", "offline": "Offline", "unknown": ""}
+NOVA_PLAYING, NOVA_GROUP = "#0a7d43", "#b0177a"  # Super Nova: deeper than the theme's green and pink, to read on glass
 
 
 class FriendRow(QFrame):
@@ -17,7 +19,8 @@ class FriendRow(QFrame):
         self.f = f
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(f"Open {f.name}'s profile")
-        self.setStyleSheet(f"FriendRow:hover {{ background: {theme.SURFACE}; border-radius: 6px; }}")
+        hover = "rgba(255, 61, 139, 0.1)" if theme.light() else theme.SURFACE
+        self.setStyleSheet(f"FriendRow:hover {{ background: {hover}; border-radius: 6px; }}")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(8, 5, 8, 5)
         av = Avatar(32)
@@ -28,7 +31,7 @@ class FriendRow(QFrame):
         col.addWidget(label(f.name))
         if f.status == "playing":
             sub = label(f.playing, "Faint")
-            sub.setStyleSheet(f"color:{theme.SUCCESS}; font-size: 8pt;")
+            sub.setStyleSheet(f"color:{NOVA_PLAYING if theme.light() else theme.SUCCESS}; font-size: 8pt;")
         else:
             text = STATUS_TEXT.get(f.status, f.status)
             if f.status == "offline" and f.last_online:
@@ -54,8 +57,6 @@ class FriendsPanel(QWidget):
         self.setObjectName("FriendsPanel")  # not #Sidebar: the sidebar paints its own (transparent) background
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedWidth(270)
-        self.setStyleSheet(f"#FriendsPanel {{ background: {theme.GLASS_DARK}; "
-                           f"border-left: 1px solid {theme.GLASS_BORDER}; }}")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 14, 12, 12)
         lay.setSpacing(8)
@@ -66,7 +67,7 @@ class FriendsPanel(QWidget):
         self.spinner = Spinner(16)
         self.spinner.hide()
         head.addWidget(self.spinner)
-        ref = icon_button("refresh", "Refresh")
+        ref = self.ref = icon_button("refresh", "Refresh")
         ref.clicked.connect(self.refresh)
         head.addWidget(ref)
         lay.addLayout(head)
@@ -85,7 +86,42 @@ class FriendsPanel(QWidget):
         area.setWidget(inner)
         lay.addWidget(area, 1)
         services.bus.friends_changed.connect(self.render)
-        self.render()
+        self._light = None
+        self._restyle()
+
+    def changeEvent(self, e):  # noqa: N802
+        super().changeEvent(e)
+        if e.type() == QEvent.Type.StyleChange and hasattr(self, "_light"):
+            self._restyle()
+
+    def _restyle(self) -> None:
+        """Glass in the theme's colours; the rows are rebuilt in them too."""
+        if self._light != theme.light():
+            self._light = theme.light()
+            self.setStyleSheet(f"#FriendsPanel {{ background: {theme.GLASS_DARK}; "
+                               f"border-left: 1px solid {theme.GLASS_BORDER}; }}")
+            self.ref.setIcon(icons.icon("refresh", theme.TEXT_DIM))
+            self.render()
+
+    def paintEvent(self, e):  # noqa: N802
+        super().paintEvent(e)
+        if not theme.light():
+            return
+        p = QPainter(self)  # Super Nova: a glow of supernova colours in the top corner, a lit edge down the side
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        for cx, cy, r, col in ((self.width(), 0, 190, QColor(255, 182, 0, 46)), (self.width() * 0.3, 0, 170,
+                                                                                QColor(255, 61, 139, 34))):
+            glow = QRadialGradient(QPointF(cx, cy), r)
+            glow.setColorAt(0, col)
+            glow.setColorAt(1, QColor(col.red(), col.green(), col.blue(), 0))
+            p.setBrush(glow)
+            p.drawEllipse(QPointF(cx, cy), r, r)
+        edge = QLinearGradient(0, 0, 0, self.height())
+        for at, col in ((0, QColor(255, 61, 139, 140)), (0.4, QColor(255, 134, 46, 80)),
+                        (0.75, QColor(138, 80, 255, 55)), (1, QColor(20, 184, 166, 35))):
+            edge.setColorAt(at, col)
+        p.fillRect(QRectF(0, 0, 1.5, self.height()), edge)
 
     def refresh(self) -> None:
         self.spinner.start()
@@ -115,7 +151,7 @@ class FriendsPanel(QWidget):
                 continue
             h = label(f"{title.upper()}  ({len(items)})", "SidebarSection")
             h.setContentsMargins(4, 10, 0, 2)
-            h.setStyleSheet("padding: 10px 4px 2px 4px;")
+            h.setStyleSheet("padding: 10px 4px 2px 4px;" + (f" color: {NOVA_GROUP};" if theme.light() else ""))
             self.list.addWidget(h)
             for f in items[:200]:
                 self.list.addWidget(FriendRow(f, self.s.integrations.get(f.source)))

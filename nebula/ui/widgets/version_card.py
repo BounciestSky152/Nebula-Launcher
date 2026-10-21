@@ -317,7 +317,7 @@ class VersionCard(QFrame):
         lay.setSpacing(8)
         head = QHBoxLayout()
         ic = label()
-        ic.setPixmap(icons.pixmap("history", 18))
+        ic.setPixmap(icons.pixmap("history", 18, theme.TEXT_DIM))
         head.addWidget(ic)
         self.title_lbl = label("Version", "SectionTitle")
         head.addWidget(self.title_lbl, 1)

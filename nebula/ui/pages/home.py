@@ -209,7 +209,8 @@ class HomePage(Page):
             r = QHBoxLayout()
             ic = label()
             ic.setPixmap(icons.pixmap({"session": "clock", "launch": "play", "install": "download",
-                                       "update": "refresh", "uninstall": "trash"}.get(kind, "info"), 16))
+                                       "update": "refresh", "uninstall": "trash"}.get(kind, "info"), 16,
+                                      theme.TEXT_DIM))
             r.addWidget(ic)
             r.addWidget(label(text), 1)
             r.addWidget(label(relative_time(ts), "Faint"))

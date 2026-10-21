@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QConicalGradient, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QLayout, QPushButton,
                                QSizePolicy, QToolButton, QVBoxLayout, QWidget, QWidgetItem)
 
@@ -21,10 +21,10 @@ def label(text: str = "", obj: str | None = None, wrap: bool = False, selectable
 
 
 def icon_button(name: str, tooltip: str = "", checkable: bool = False, size: int = 18,
-                color: str = theme.TEXT_DIM) -> QPushButton:
+                color: str | None = None) -> QPushButton:
     b = QPushButton()
     b.setObjectName("IconButton")
-    b.setIcon(icons.icon(name, color))
+    b.setIcon(icons.icon(name, color or theme.TEXT_DIM))
     b.setIconSize(QSize(size, size))
     b.setToolTip(tooltip)
     b.setCheckable(checkable)
@@ -174,7 +174,8 @@ class HeroBanner(RemoteImage):
     def _compose(self) -> QPixmap:
         """Artwork with an alpha fade (cached: twinkling stars repaint this area often)."""
         dpr = self.devicePixelRatioF() or 1.0
-        key = (self.width(), self.height(), dpr, self._pm.cacheKey() if self._pm is not None else self._title)
+        key = (self.width(), self.height(), dpr, self._pm.cacheKey() if self._pm is not None else self._title,
+               theme.light())
         if self._composed is not None and self._composed_key == key:
             return self._composed
         w, h = max(1, self.width()), max(1, self.height())
@@ -201,6 +202,11 @@ class HeroBanner(RemoteImage):
             g.setColorAt(0, QColor.fromHsl(hh % 360, 70, 60, 160))
             g.setColorAt(1, QColor(0, 0, 0, 0))
             p.fillRect(r, g)
+        if theme.light():  # Super Nova's text is dark: frost the left side, then let it all dissolve into the sky
+            side = QLinearGradient(0, 0, w, 0)
+            side.setColorAt(0, QColor(255, 250, 253, 215))
+            side.setColorAt(0.62, QColor(255, 250, 253, 0))
+            p.fillRect(r, side)
         # dissolve the artwork towards the bottom so the stars show through
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
         mask = QLinearGradient(0, 0, 0, h)
@@ -208,12 +214,13 @@ class HeroBanner(RemoteImage):
         mask.setColorAt(0.55, QColor(0, 0, 0, 170))
         mask.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.fillRect(r, mask)
-        # darken the left side for title/button contrast
-        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        side = QLinearGradient(0, 0, w, 0)
-        side.setColorAt(0, QColor(6, 6, 16, 150))
-        side.setColorAt(0.55, QColor(6, 6, 16, 0))
-        p.fillRect(r, side)
+        if not theme.light():
+            # darken the left side for title/button contrast
+            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            side = QLinearGradient(0, 0, w, 0)
+            side.setColorAt(0, QColor(6, 6, 16, 150))
+            side.setColorAt(0.55, QColor(6, 6, 16, 0))
+            p.fillRect(r, side)
         p.end()
         self._composed, self._composed_key = out, key
         return out
@@ -396,6 +403,11 @@ class Spinner(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         pen = QPen(QColor(theme.ACCENT), max(2, self.width() // 8))
+        if theme.light():  # a little supernova chasing its tail
+            g = QConicalGradient(self.width() / 2, self.height() / 2, -self._angle)
+            for i, c in enumerate(theme.NOVA):
+                g.setColorAt(i * 0.375, QColor(c))
+            pen.setBrush(g)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
         m = pen.width()
@@ -432,7 +444,7 @@ class Sparkline(QWidget):
         g.setColorAt(0, QColor(c.red(), c.green(), c.blue(), 110))
         g.setColorAt(1, QColor(c.red(), c.green(), c.blue(), 0))
         p.fillPath(path, g)
-        p.setPen(QPen(c, 1.6))
+        p.setPen(QPen(theme.gradient(0, 0, w, 0) if theme.light() else c, 1.6))
         p.drawPath(line)
 
 
@@ -483,6 +495,9 @@ class BarChart(QWidget):
             bh = (v / top) * chart_h if top else 0
             r = QRectF(x, 18 + chart_h - bh, bar_w, max(bh, 2 if v else 0))
             color = QColor(theme.ACCENT_HOVER if i == self._hover else theme.ACCENT)
+            if theme.light():  # each bar a flare: violet at the base, burning to tangerine (gold under the mouse)
+                color = theme.gradient(0, r.bottom(), 0, r.top(), theme.NOVA if i != self._hover else
+                                       (theme.NOVA[0], theme.NOVA[1], theme.GOLD[0]))
             path = QPainterPath()
             path.addRoundedRect(r, 3, 3)
             p.fillPath(path, color)
@@ -497,10 +512,10 @@ class BarChart(QWidget):
 class HBarChart(QWidget):
     """Horizontal bars with labels: list of (label, value, display_text)."""
 
-    def __init__(self, color: str = theme.ACCENT, parent=None):
+    def __init__(self, color: str | None = None, parent=None):
         super().__init__(parent)
         self.data: list[tuple[str, float, str]] = []
-        self.color = color
+        self.color = color or theme.ACCENT
 
     def set_data(self, data) -> None:
         self.data = list(data)
@@ -525,7 +540,12 @@ class HBarChart(QWidget):
             bw = (w - label_w - val_w) * (v / top)
             path = QPainterPath()
             path.addRoundedRect(QRectF(label_w, y + 6, max(bw, 3), 12), 4, 4)
-            p.fillPath(path, QColor(self.color))
+            fill = QColor(self.color)
+            if theme.light():  # glowing warmer and brighter towards the tip
+                c = QColor(self.color)
+                tip = QColor.fromHslF((c.hslHueF() + 0.1) % 1.0, c.hslSaturationF(), min(0.72, c.lightnessF() + 0.14))
+                fill = theme.gradient(label_w, 0, label_w + max(bw, 3), 0, (c.name(), tip.name()))
+            p.fillPath(path, fill)
             p.setPen(QColor(theme.TEXT))
             p.drawText(QRectF(w - val_w, y, val_w, 24), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, txt)
 
@@ -663,7 +683,7 @@ class ToastHost:
 def tool_button(name: str, tooltip: str = "") -> QToolButton:
     b = QToolButton()
     b.setObjectName("IconButton")
-    b.setIcon(icons.icon(name))
+    b.setIcon(icons.icon(name, theme.TEXT_DIM))
     b.setIconSize(QSize(18, 18))
     b.setToolTip(tooltip)
     b.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)

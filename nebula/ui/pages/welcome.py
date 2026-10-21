@@ -1,13 +1,30 @@
 """First-run screen: sign in with GOG (like GOG Galaxy's start-up login)."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QFontMetricsF, QPainter, QPainterPath
 from PySide6.QtWidgets import QLabel, QVBoxLayout
 
 from nebula import APP_NAME
-from nebula.ui import icons
+from nebula.ui import icons, theme
 from nebula.ui.pages.base import Page
 from nebula.ui.widgets.common import button, card, label
+
+
+class NovaTitle(QLabel):
+    """A centred one-line title that Super Nova lights up in violet, magenta and flame (deep enough to read)."""
+
+    def paintEvent(self, e):  # noqa: N802
+        if not theme.light():
+            return super().paintEvent(e)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        fm = QFontMetricsF(self.font())
+        w = fm.horizontalAdvance(self.text()) - self.font().letterSpacing()  # no tracking after the last letter
+        x, y = (self.width() - w) / 2, (self.height() + fm.ascent() - fm.descent()) / 2
+        path = QPainterPath()
+        path.addText(QPointF(x, y), self.font(), self.text())
+        p.fillPath(path, theme.gradient(x, 0, x + w, 0, ("#7a2cf0", "#d6157f", "#d9480f")))
 
 
 class WelcomePage(Page):
@@ -27,7 +44,8 @@ class WelcomePage(Page):
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo.setFixedHeight(88)
         lay.addWidget(logo)
-        title = label(APP_NAME.upper(), "Brand")
+        title = NovaTitle(APP_NAME.upper())
+        title.setObjectName("Brand")
         title.setStyleSheet("font-size: 26pt; font-weight: 800; letter-spacing: 8px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(title)
