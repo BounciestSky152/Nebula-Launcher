@@ -289,11 +289,13 @@ class HandheldSettingsPage(Page):
         return [
             ("Big Picture", [
                 ChoiceRow(self, "general.launch_behaviour", "When a game starts", [
-                    ("keep", "Keep Nebula open"), ("minimize", "Minimise Nebula"), ("hide", "Hide to tray")]),
+                    ("keep", "Keep Super Nova open"), ("minimize", "Minimise Super Nova"), ("hide", "Hide to tray")]),
                 ToggleRow(self, "appearance.fun", "Fun extras", "Launch warp, seasonal skies and a few secrets"),
                 ToggleRow(self, "appearance.starfield", "Starry sky"),
                 ToggleRow(self, "appearance.animate_stars", "Animated stars", "Pauses while a game is running"),
-                ChoiceRow(self, "appearance.theme", "Theme", [("nebula", "Nebula"), ("classic", "Classic")]),
+                ChoiceRow(self, "appearance.theme", "Theme", [("nebula", "Nebula"), ("supernova", "Super Nova (light)"),
+                                                              ("classic", "Classic")],
+                          "Big Picture always uses the dark sky; Super Nova lights up the desktop layout"),
                 ActionRow(self, "Exit Big Picture", "Exit", lambda: st.set("handheld.mode", "off"),
                           "Back to the desktop layout (F11 does the same)"),
             ]),
@@ -344,7 +346,7 @@ class HandheldSettingsPage(Page):
                           [("ask", "Ask me"), ("newest", "Keep the newest")]),
             ]),
             ("System", [
-                ToggleRow(self, "general.autostart", "Start Nebula when I log in"),
+                ToggleRow(self, "general.autostart", "Start Super Nova when I log in"),
                 ToggleRow(self, "general.start_minimized", "Start minimised"),
                 ToggleRow(self, "general.show_tray", "Tray icon"),
                 ToggleRow(self, "general.close_to_tray", "Keep running in the tray when closed"),
@@ -352,7 +354,7 @@ class HandheldSettingsPage(Page):
                 ChoiceRow(self, "general.language", "Game language", LANGUAGES),
             ]),
             ("Updates", [
-                ActionRow(self, lambda: f"Nebula {__version__}", "Check now",
+                ActionRow(self, lambda: f"Super Nova {__version__}", "Check now",
                           lambda: s.self_update.check(manual=True), update_status),
                 ToggleRow(self, "updates.auto_check", "Look for new versions"),
                 ChoiceRow(self, "updates.interval_minutes", "Check every",
@@ -365,7 +367,7 @@ class HandheldSettingsPage(Page):
                         secret=True),
             ]),
             ("About", [
-                ActionRow(self, f"Nebula {__version__}", "All settings",
+                ActionRow(self, f"Super Nova {__version__}", "All settings",
                           lambda: self.win.navigate("settings", "full"),
                           "Every option, in the desktop layout (integrations, Proton versions...)"),
             ]),

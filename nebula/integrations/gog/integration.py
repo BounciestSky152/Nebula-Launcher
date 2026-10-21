@@ -34,10 +34,10 @@ SUMMARY_MAX_AGE = 3600  # rewrite the saved "newest version" summary at least th
 
 INSTALLER_NOTES = {
     "linux": "GOG only offers the newest Linux installer, so older versions and beta channels can't be installed "
-             "for the Linux version. They're only offered for Windows (GOG Galaxy builds), which Nebula can run "
+             "for the Linux version. They're only offered for Windows (GOG Galaxy builds), which Super Nova can run "
              "with Proton.",
     "windows": "This copy came from GOG's offline installer, which only exists for the newest version. To choose "
-               "older versions or beta channels, uninstall it and install it again from Nebula. Nebula then uses "
+               "older versions or beta channels, uninstall it and install it again from Super Nova. Super Nova then uses "
                "GOG Galaxy builds when GOG has them.",
 }
 
@@ -992,7 +992,7 @@ class GogIntegration(Integration):
         return info
 
     def _available_info(self, game: Game, fetch: bool, refresh: bool) -> base.VersionInfo:
-        """A game that isn't installed: the newest version GOG offers for the platform Nebula would install."""
+        """A game that isn't installed: the newest version GOG offers for the platform Super Nova would install."""
         platform = self.default_platform(game)
         info = base.VersionInfo(kind="builds" if platform == "windows" else "installer", platform=platform,
                                 status="not_installed")
@@ -1013,7 +1013,7 @@ class GogIntegration(Integration):
                     info.latest = self._build_ref(latest, newest=True)
                     info.branches = ["" if br is None else br for br in content.Gen2.branches(builds)]
                     return info
-                info.kind = "installer"  # no Galaxy builds: Nebula installs GOG's offline installer
+                info.kind = "installer"  # no Galaxy builds: Super Nova installs GOG's offline installer
             hit = self._installers(pid, fetch, refresh)
             if hit is None:
                 info.stale = True
@@ -1067,7 +1067,7 @@ class GogIntegration(Integration):
         if match is not None:
             info.newer_count = sum(1 for b in builds if (b.get("branch") or "") == tracked
                                    and str(b.get("date_published") or "") > inst.published)
-        # an unlisted build only means "update" for Nebula's own installs (imports may carry legacy ids)
+        # an unlisted build only means "update" for Super Nova's own installs (imports may carry legacy ids)
         info.update_available = info.status == "behind" or (info.status == "unlisted" and rec.get("method") == "gen2")
         seen: set[str] = set()
         for b in builds:

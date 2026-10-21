@@ -1,6 +1,6 @@
 """Compatibility layer: runs Windows games through Proton (default) or Wine.
 
-Proton is located from Nebula's own runner directory (GE-Proton downloads),
+Proton is located from Super Nova's own runner directory (GE-Proton downloads),
 Steam's ``compatibilitytools.d``, Steam's ``steamapps/common/Proton*`` and
 system packages. When ``umu-run`` (umu-launcher) is available it is used so
 Proton runs inside the Steam Linux Runtime exactly like it would in Steam,
@@ -585,7 +585,7 @@ def is_executable_file(p: str | Path) -> bool:
 
 def remove_runner(runner: Runner) -> None:
     if not runner.removable:
-        raise ValueError("Only runners downloaded by Nebula can be removed here")
+        raise ValueError("Only runners downloaded by Super Nova can be removed here")
     target = Path(runner.path if runner.kind == "proton" else Path(runner.path).parent.parent)
     if paths.runners_dir().resolve() in target.resolve().parents:
         shutil.rmtree(target)

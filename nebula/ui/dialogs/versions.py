@@ -161,7 +161,7 @@ class ChangeVersionDialog(QDialog):
         self._reset_choice()
         if info is None or info.kind not in ("builds", "installer"):
             self.sub.setText("")
-            self._message("Nebula can't manage versions for this copy.")
+            self._message("Super Nova can't manage versions for this copy.")
             self._close_only()
             return
         inst = info.installed
@@ -261,11 +261,11 @@ class ChangeVersionDialog(QDialog):
         elif (sel.published or sel.date) > (inst.published or inst.date):
             newest = next((b.label for b in info.builds if b.newest and b.branch == sel.branch), "")
             version, change, lbl, ok = sel.id, "update", v, f"Install {v}"
-            summary = (f"Install {v}{when}. A newer version, {newest}, exists, so Nebula will stop offering updates "
+            summary = (f"Install {v}{when}. A newer version, {newest}, exists, so Super Nova will stop offering updates "
                        "until you choose it.")
         else:
             version, change, lbl, ok = sel.id, "rollback", v, f"Roll back to {v}"
-            summary = (f"Roll back to {v}{when}. Only files that differ are downloaded. Nebula will stop offering "
+            summary = (f"Roll back to {v}{when}. Only files that differ are downloaded. Super Nova will stop offering "
                        "updates for this game until you update again.")
             warn = "Saves made by a newer version may not work in an older one. Back them up if you're unsure."
         if change in ("rollback", "switch") and self.game.extra.get("installed_dlcs"):

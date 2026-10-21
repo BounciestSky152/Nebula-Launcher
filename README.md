@@ -1,4 +1,6 @@
-# Nebula — a GOG Galaxy-style launcher for Linux
+# Super Nova — a GOG Galaxy-style launcher for Linux
+
+*Super Nova was called Nebula before version 1.3.12. Installs from before the rename move their settings, library and command over by themselves (`nebula` still works as a command), and the original look lives on as the **Nebula** theme next to the new light **Super Nova** theme.*
 
 First off, yes this was vibe coded and no this is not associated with the old nebula project from years ago. This is something
 I was going to keep private, but am forced to make public in order for certain features to work. This is the closest we will probably
@@ -14,10 +16,10 @@ place for a future project feel free to fork it.
 
 # And of course the rest
 
-Nebula is a GOG launcher first. Sign in with GOG and your GOG library, the GOG store, your wishlist, cloud saves,
+Super Nova is a GOG launcher first. Sign in with GOG and your GOG library, the GOG store, your wishlist, cloud saves,
 achievements and GOG friends sit at the centre of the app, the way they do in GOG Galaxy 2.0. Your **Steam**,
 **Epic Games** (through Legendary/Heroic), **Lutris** and hand-added games join the same library alongside them.
-**Every Windows-only game runs through Proton automatically.** Nebula also **updates itself from GitHub**.
+**Every Windows-only game runs through Proton automatically.** Super Nova also **updates itself from GitHub**.
 
 ![Home](docs/screenshots/home.png)
 
@@ -30,7 +32,7 @@ achievements and GOG friends sit at the centre of the app, the way they do in GO
 
 ## Built around GOG
 
-* **Sign in with GOG first.** The first time Nebula starts it shows a GOG sign-in screen. You can skip it and
+* **Sign in with GOG first.** The first time Super Nova starts it shows a GOG sign-in screen. You can skip it and
   sign in later from the top bar.
 * **The sidebar starts with GOG.COM:** Home, Store, Wishlist and *My GOG games*. After that come your whole
   library (all games, installed, favourites, updates), then other platforms, your saved views and activity.
@@ -71,17 +73,17 @@ Every GOG game has a **Version** card on its page and matching rows in the Info 
   * The dialog warns you before a rollback or channel switch that could affect saves.
   * DLC that an older build doesn't include is removed, and it comes back when you update again.
 * **Pinning:** rolling back, or choosing a version that isn't the newest, turns on **Stay on this version**.
-  Nebula then stops offering updates for that game, but still shows what the newest version is. Updating to the
+  Super Nova then stops offering updates for that game, but still shows what the newest version is. Updating to the
   newest version, or switching to the newest build of another channel, turns the pin off again. You can also
   tick or untick it yourself.
 * **Update automatically** is a per-game switch. It follows the global setting in Settings › Downloads.
-* **If a beta channel ends**, Nebula never moves you back automatically, because Stable can be older than your
+* **If a beta channel ends**, Super Nova never moves you back automatically, because Stable can be older than your
   beta. The card offers *Switch to Stable* instead.
 * **Linux native versions** come from GOG's offline installers. GOG only offers the newest installer, so these
   can be updated to the newest version but not rolled back. Older versions and beta channels are only available
-  for the Windows version (GOG Galaxy builds), which Nebula runs with Proton.
+  for the Windows version (GOG Galaxy builds), which Super Nova runs with Proton.
 * **Version checks** happen when you open a game page (at most every few minutes) and during the regular update
-  check. A failed check never hides an update Nebula already found. The card shows when GOG was last checked
+  check. A failed check never hides an update Super Nova already found. The card shows when GOG was last checked
   and has a button to check again.
 
 ![Change version](docs/screenshots/change-version.png)
@@ -90,13 +92,13 @@ Every GOG game has a **Version** card on its page and matching rows in the Info 
 
 * **Proton is the default** for every game without a native Linux build: GOG Windows builds, Epic games,
   Windows `.exe` files you add by hand, and GOG's Windows offline installers.
-* Nebula finds Proton automatically in `~/.steam/.../compatibilitytools.d`, Steam's `steamapps/common/Proton*`,
+* Super Nova finds Proton automatically in `~/.steam/.../compatibilitytools.d`, Steam's `steamapps/common/Proton*`,
   system packages and its own runner folder. It prefers the newest **GE-Proton**.
 * **One-click GE-Proton download** (Settings › Compatibility, or *Add games › Download GE-Proton*). Downloads are
   checked against their SHA-512 sums before they are unpacked.
 * **umu-launcher support.** When `umu-run` is installed (or installed from Settings with one click), Proton runs
   inside the Steam Linux Runtime the way Steam runs it. It also applies per-game **protonfixes**, looked up in the
-  umu database by store and game ID. Without umu, Nebula runs `proton waitforexitandrun` itself and supplies the
+  umu database by store and game ID. Without umu, Super Nova runs `proton waitforexitandrun` itself and supplies the
   environment Steam would provide.
 * **One prefix per game**, plus per-game Proton or Wine version, winecfg, winetricks, *Run .exe in prefix*,
   kill wineserver and delete prefix.
@@ -111,7 +113,7 @@ Every GOG game has a **Version** card on its page and matching rows in the Info 
 
 ## GOG Galaxy 2.0 features
 
-| Galaxy feature | Nebula |
+| Galaxy feature | Super Nova |
 |---|---|
 | Unified library across platforms | ✅ GOG, Steam, Epic (Legendary/Heroic), Lutris, manual games, plugins |
 | Same game owned on several platforms merged into one entry | ✅ pick the preferred platform per game |
@@ -144,7 +146,7 @@ Every GOG game has a **Version** card on its page and matching rows in the Info 
 | Add a game manually | ✅ Linux binaries, Windows `.exe` (Proton), emulator command lines |
 | Extra launch options (editor, settings, manuals) | ✅ from GOG's `playTasks` |
 | Install / uninstall / verify Steam and Epic games | ✅ handed to Steam, or run through Legendary with progress shown in Downloads |
-| Desktop and menu shortcuts, tray icon, notifications, start minimised | ✅ `nebula --launch gog:<id>` |
+| Desktop and menu shortcuts, tray icon, notifications, start minimised | ✅ `supernova --launch gog:<id>` |
 | Integrations / plugins | ✅ Python plugin API modelled on Galaxy's integration API |
 | In-game overlay | ⚠️ Galaxy's overlay hooks DirectX on Windows, which isn't possible here. MangoHud is offered instead. |
 | Chat | ❌ GOG has no public chat API |
@@ -152,7 +154,7 @@ Every GOG game has a **Version** card on its page and matching rows in the Info 
 
 ## Automatic updates from GitHub
 
-Nebula checks [BounciestSky152/Nebula-Launcher](https://github.com/BounciestSky152/Nebula-Launcher) for new
+Super Nova checks [BounciestSky152/Super-Nova-Launcher](https://github.com/BounciestSky152/Super-Nova-Launcher) for new
 commits every 30 minutes (and 20 seconds after start-up). It only updates when **files the app actually runs**
 have changed:
 
@@ -161,11 +163,11 @@ have changed:
 * **Ignored files** include `README.md`, `docs/` and screenshots, `tests/`, `scripts/`, CI settings and
   `__pycache__`. A commit that only touches these never triggers an update, a download or a restart.
 
-Nebula decides this by comparing the git blob hashes of your installed files with the tree of the latest commit
+Super Nova decides this by comparing the git blob hashes of your installed files with the tree of the latest commit
 on GitHub. It doesn't need to know which version you started from, and it only reports a file that really
 differs.
 
-How an update is installed depends on how you installed Nebula:
+How an update is installed depends on how you installed Super Nova:
 
 | Install type | What the updater does |
 |---|---|
@@ -176,19 +178,19 @@ How an update is installed depends on how you installed Nebula:
 
 Safety:
 
-* Every Nebula module is loaded at start-up, so swapping files on disk can't leave a half-updated program
+* Every Super Nova module is loaded at start-up, so swapping files on disk can't leave a half-updated program
   running.
 * An update that arrives while a game is running or a download is active waits until they finish.
-* After installing, a banner offers *Restart now*, or Nebula restarts on its own after 20 seconds once nothing is
+* After installing, a banner offers *Restart now*, or Super Nova restarts on its own after 20 seconds once nothing is
   running. Games and downloads are never interrupted.
 * A note after the restart lists the commits that were applied.
 
 Settings › Updates shows the version and commit, the install type and status, and a *Check for updates now*
 button. It also has switches for automatic checking, installing and restarting, plus the check interval and the
-repository/branch to follow. Start with `nebula --no-update` (or set `NEBULA_NO_UPDATE=1`) to turn the updater
+repository/branch to follow. Start with `supernova --no-update` (or set `SUPERNOVA_NO_UPDATE=1`) to turn the updater
 off for one session.
 
-**Private repository:** GitHub answers *404* to anonymous requests, so add a token in Settings › Updates. Without one, Nebula uses `$GITHUB_TOKEN` or the GitHub CLI login (`gh auth login`).
+**Private repository:** GitHub answers *404* to anonymous requests, so add a token in Settings › Updates. Without one, Super Nova uses `$GITHUB_TOKEN` or the GitHub CLI login (`gh auth login`).
 
 The updater only contacts GitHub. Checking for a new commit uses a conditional request that doesn't count
 against GitHub's API rate limit, and if the limit is reached anyway it falls back to the git protocol. The file
@@ -201,7 +203,7 @@ list and the tarball are fetched only when there really is a new commit.
 You need Python 3.10 or newer. Then:
 
 ```bash
-./scripts/install.sh               # per-user install: venv, `nebula` command, menu entry
+./scripts/install.sh               # per-user install: venv, `supernova` command, menu entry
 ./scripts/install.sh --webengine   # same, plus the embedded GOG login page
 ./scripts/install.sh --uninstall
 ```
@@ -215,28 +217,28 @@ python -m nebula
 
 Recommended system packages (all optional): `umu-launcher`, `gamemode`, `mangohud`, `gamescope`, `innoextract`
 (unpacks GOG Windows offline installers without Wine), `winetricks`, `legendary` (Epic), `dosbox-staging`,
-`scummvm`. Settings › Compatibility › *Detected tools* shows which ones Nebula found.
+`scummvm`. Settings › Compatibility › *Detected tools* shows which ones Super Nova found.
 
 ## Connecting platforms
 
-* **GOG:** use the welcome screen, or *Sign in with GOG* in the top bar. With PySide6-Addons the login page opens inside Nebula.
-  Without it, Nebula opens your browser and you paste the final `on_login_success` address back.
+* **GOG:** use the welcome screen, or *Sign in with GOG* in the top bar. With PySide6-Addons the login page opens inside Super Nova.
+  Without it, Super Nova opens your browser and you paste the final `on_login_success` address back.
 * **Steam:** installed games, play time and artwork are read from your local Steam folder. For games you own but
   haven't installed, plus achievements and friends, add a
   [Steam Web API key](https://steamcommunity.com/dev/apikey) in Settings › Integrations.
-* **Epic Games:** sign in once with `legendary auth` or in Heroic. Nebula reads the library and launches games with
-  `legendary launch --no-wine --wrapper <Proton>`, so they run with Nebula's Proton settings.
+* **Epic Games:** sign in once with `legendary auth` or in Heroic. Super Nova reads the library and launches games with
+  `legendary launch --no-wine --wrapper <Proton>`, so they run with Super Nova's Proton settings.
 * **Lutris:** detected automatically. Games launch through Lutris.
 * **Other games:** use *Add games › Add game manually*.
 
 ## Command line
 
 ```
-nebula                       start, or bring the running window to front
-nebula --launch gog:1207658924   launch a game (used by desktop shortcuts)
-nebula --minimized           start in the tray
-nebula --debug               verbose logging (~/.local/share/nebula/logs)
-nebula --no-update           don't check GitHub for Nebula updates this session
+supernova                       start, or bring the running window to front
+supernova --launch gog:1207658924   launch a game (used by desktop shortcuts)
+supernova --minimized           start in the tray
+supernova --debug               verbose logging (~/.local/share/supernova/logs)
+supernova --no-update           don't check GitHub for Super Nova updates this session
 ```
 
 Keyboard shortcuts:
@@ -251,7 +253,7 @@ Keyboard shortcuts:
 
 ## Plugins
 
-Drop a `.py` file into `~/.local/share/nebula/plugins/` and restart Nebula. Any subclass of
+Drop a `.py` file into `~/.local/share/supernova/plugins/` and restart Super Nova. Any subclass of
 `nebula.integrations.base.Integration` in that file becomes a new platform. It can implement any subset of
 `fetch_library`, `prepare_launch`, `install`, `achievements`, `friends` and the other methods in
 [`nebula/integrations/base.py`](nebula/integrations/base.py).
@@ -261,10 +263,10 @@ Drop a `.py` file into `~/.local/share/nebula/plugins/` and restart Nebula. Any 
 
 | Path | Contents |
 |---|---|
-| `~/.config/nebula/` | settings, GOG credentials (mode 600) |
-| `~/.local/share/nebula/` | library database, Proton prefixes, downloaded Proton/umu, GOG manifests, redistributables, logs, `update-state.json` |
-| `~/.cache/nebula/` | artwork cache, partially downloaded installers |
-| `~/Games/Nebula/` | default install folder (change it in Settings › Library) |
+| `~/.config/supernova/` | settings, GOG credentials (mode 600) |
+| `~/.local/share/supernova/` | library database, Proton prefixes, downloaded Proton/umu, GOG manifests, redistributables, logs, `update-state.json` |
+| `~/.cache/supernova/` | artwork cache, partially downloaded installers |
+| `~/Games/SuperNova/` | default install folder (change it in Settings › Library) |
 
 ## Development
 
@@ -302,17 +304,17 @@ nebula/
 
 ## Status and limitations
 
-* GOG's servers could not be reached from the environment Nebula was built in. The GOG protocols (OAuth, Galaxy
+* GOG's servers could not be reached from the environment Super Nova was built in. The GOG protocols (OAuth, Galaxy
   content system, secure links, cloud storage, gameplay, presence) follow the open-source implementations in
   Heroic's *gogdl* and *minigalaxy*, and they are exercised against simulated servers in the test suite. Your
-  first real sign-in and install is the first live run. If something fails, run `nebula --debug` and check the
+  first real sign-in and install is the first live run. If something fails, run `supernova --debug` and check the
   logs.
 * Password-protected GOG beta channels aren't supported yet; public beta channels are.
 * GOG cloud saves work for Windows builds, which keep their saves inside the Proton prefix. GOG doesn't publish
   cloud-save locations for its Linux builds.
 * The GOG friends list comes from an undocumented endpoint. Friends' online status isn't available, so they're
   listed without presence.
-* Nebula signs in with the public GOG Galaxy client ID that all open-source GOG launchers use. It is not
+* Super Nova signs in with the public GOG Galaxy client ID that all open-source GOG launchers use. It is not
   affiliated with GOG sp. z o.o., Valve, Epic Games or Lutris. Store pages and artwork belong to their owners.
 
 ## Credits

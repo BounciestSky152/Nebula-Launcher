@@ -141,7 +141,7 @@ class JobContext:
                 self.job._net += n
 
     def report_external(self, done: int, total: int | None = None) -> None:
-        """Progress reported by an external tool (not subject to Nebula's speed limit)."""
+        """Progress reported by an external tool (not subject to Super Nova's speed limit)."""
         with self._lock:
             if total is not None:
                 self.job.total = int(total)

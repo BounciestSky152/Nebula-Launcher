@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QVBoxLayout
 
+from nebula import APP_NAME
 from nebula.ui import icons
 from nebula.ui.pages.base import Page
 from nebula.ui.widgets.common import button, card, label
@@ -26,7 +27,7 @@ class WelcomePage(Page):
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo.setFixedHeight(88)
         lay.addWidget(logo)
-        title = label("NEBULA", "Brand")
+        title = label(APP_NAME.upper(), "Brand")
         title.setStyleSheet("font-size: 26pt; font-weight: 800; letter-spacing: 8px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(title)

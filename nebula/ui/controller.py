@@ -94,7 +94,7 @@ class UiController:
     def install(self, game) -> None:
         integ = self.integ(game)
         if not integ.supports(base.INSTALL):
-            QMessageBox.information(self.w, "Install", f"{integ.name} games can't be installed from Nebula.")
+            QMessageBox.information(self.w, "Install", f"{integ.name} games can't be installed from Super Nova.")
             return
         if game.source == "gog" and not integ.connected():
             self.gog_login()
@@ -211,7 +211,7 @@ class UiController:
         if f.exists():
             xdg_open(str(f))
         else:
-            self.w.toast("No log yet", "Launch the game from Nebula first")
+            self.w.toast("No log yet", "Launch the game from Super Nova first")
 
     def shortcut(self, game) -> None:
         self.s.actions.create_shortcut(game, on_done=lambda paths: self.w.toast(

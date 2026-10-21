@@ -146,7 +146,7 @@ class GameLauncher(QObject):
                 raise RuntimeError(f"Could not open {spec.uri}")
         else:
             logf = open(self.log_file(game.uid), "w")
-            logf.write(f"# Nebula launch log - {time.ctime()}\n# {spec.description}\n# cwd: {spec.cwd}\n")
+            logf.write(f"# Super Nova launch log - {time.ctime()}\n# {spec.description}\n# cwd: {spec.cwd}\n")
             env_line = " ".join(f"{k}={shlex.quote(v)}" for k, v in sorted(spec.env.items()))
             logf.write(f"# {env_line} {shlex.join(spec.argv)}\n\n")
             logf.flush()

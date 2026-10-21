@@ -217,7 +217,7 @@ class ProtonDialog(QDialog):
         lay.setContentsMargins(18, 18, 18, 18)
         lay.addWidget(label("GE-Proton", "SectionTitle"))
         lay.addWidget(label("GloriousEggroll's Proton build includes extra game fixes, media codecs and the latest "
-                            "DXVK/VKD3D. Nebula uses the newest installed GE-Proton for Windows games by default.",
+                            "DXVK/VKD3D. Super Nova uses the newest installed GE-Proton for Windows games by default.",
                             "Faint", wrap=True))
         self.spinner = Spinner(20)
         self.spinner.start()

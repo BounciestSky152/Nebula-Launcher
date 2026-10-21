@@ -248,7 +248,7 @@ class GameSettingsDialog(QDialog):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(10, 16, 10, 10)
-        lay.addWidget(label("The exact command Nebula will run (saved settings):", "Subtle"))
+        lay.addWidget(label("The exact command Super Nova will run (saved settings):", "Subtle"))
         self.preview = QPlainTextEdit()
         self.preview.setReadOnly(True)
         lay.addWidget(self.preview, 1)

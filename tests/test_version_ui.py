@@ -12,7 +12,7 @@ from nebula.integrations.base import BuildRef, VersionInfo
 from nebula.ui.widgets.version_card import describe_version
 
 LINUX_NOTE = ("GOG only offers the newest Linux installer, so older versions and beta channels can't be installed for "
-              "the Linux version. They're only offered for Windows (GOG Galaxy builds), which Nebula can run with "
+              "the Linux version. They're only offered for Windows (GOG Galaxy builds), which Super Nova can run with "
               "Proton.")
 
 
@@ -91,7 +91,7 @@ STALE_EMPTY = VersionInfo(kind="builds", installed=BuildRef(id="b1", version="1.
 STATES = [
     ("hidden", None, {}, {"visible": False}),
     ("kind none", VersionInfo(kind="none", installed=BuildRef(version="1.0")), {},
-     {"status_text": "Nebula can't manage versions for this copy.", "update_visible": False,
+     {"status_text": "Super Nova can't manage versions for this copy.", "update_visible": False,
       "change_visible": False, "refresh_visible": False, "toggles_visible": False, "signin_visible": False}),
     ("loading, nothing known", STALE_EMPTY, {"loading": True},
      {"newest_text": lambda s: s.startswith("Checking GOG"), "newest_loading": True, "refresh_enabled": False,
@@ -151,7 +151,7 @@ STATES = [
       "installed_sub": lambda s: s.startswith("GOG offline installer (Windows)")}),
     ("installer, installed version unknown", installer_info("", "unknown"), {},
      {"installed_text": "Unknown version", "newest_text": "1.2", "update_visible": True, "update_primary": False,
-      "status_text": "Nebula doesn't know which installer version this copy came from."}),
+      "status_text": "Super Nova doesn't know which installer version this copy came from."}),
     ("signed out", builds_info("b1", "behind", error="signed_out", stale=True), {},
      {"signin_visible": True, "refresh_visible": False, "update_visible": False, "change_visible": True,
       "change_enabled": False, "change_tip": "Sign in to GOG first", "newest_obj": "Faint",

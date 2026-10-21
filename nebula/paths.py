@@ -1,7 +1,7 @@
-"""XDG-compliant filesystem locations used by Nebula.
+"""XDG-compliant filesystem locations used by Super Nova.
 
-Setting ``NEBULA_HOME`` relocates every directory under a single root, which
-is handy for portable installs and for the test-suite.
+Setting ``SUPERNOVA_HOME`` (or the older ``NEBULA_HOME``) relocates every directory under a single root,
+which is handy for portable installs and for the test-suite.
 """
 from __future__ import annotations
 
@@ -17,14 +17,27 @@ def _xdg(var: str, fallback: str) -> Path:
 
 
 def _root(kind: str) -> Path:
-    home = os.environ.get("NEBULA_HOME")
+    home = os.environ.get("SUPERNOVA_HOME") or os.environ.get("NEBULA_HOME")
     if home:
         return Path(home) / kind
-    return {
+    return _renamed({
         "config": _xdg("XDG_CONFIG_HOME", ".config"),
         "data": _xdg("XDG_DATA_HOME", ".local/share"),
         "cache": _xdg("XDG_CACHE_HOME", ".cache"),
-    }[kind] / "nebula"
+    }[kind])
+
+
+def _renamed(base: Path) -> Path:
+    """``base``/supernova. A folder from when the app was called Nebula is moved there and a link left in its
+    place, so the installer's venv and every path saved before keep working."""
+    new, old = base / "supernova", base / "nebula"
+    if not new.exists() and old.is_dir() and not old.is_symlink():
+        try:
+            old.rename(new)
+            old.symlink_to(new, target_is_directory=True)
+        except OSError:
+            return old if old.is_dir() else new
+    return new
 
 
 def config_dir() -> Path:
@@ -101,7 +114,8 @@ def installers_cache() -> Path:
 
 
 def default_library_dir() -> Path:
-    return Path.home() / "Games" / "Nebula"
+    old = Path.home() / "Games" / "Nebula"
+    return old if old.is_dir() else Path.home() / "Games" / "SuperNova"
 
 
 def applications_dir() -> Path:

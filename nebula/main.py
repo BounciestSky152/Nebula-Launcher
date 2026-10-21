@@ -9,7 +9,7 @@ import os
 import signal
 import sys
 
-from nebula import APP_ID, APP_NAME, __version__, paths
+from nebula import APP_ID, APP_NAME, LEGACY_APP_ID, __version__, paths
 
 SOCKET_NAME = f"nebula-{getpass.getuser()}"
 
@@ -30,11 +30,11 @@ def _setup_logging(debug: bool) -> None:
 
 
 def _parse(argv):
-    p = argparse.ArgumentParser(prog="nebula", description=f"{APP_NAME} - a unified game launcher for Linux")
+    p = argparse.ArgumentParser(prog="supernova", description=f"{APP_NAME} - a unified game launcher for Linux")
     p.add_argument("--launch", metavar="UID", help="launch a game by id, e.g. gog:1207658924 or steam:620")
     p.add_argument("--minimized", action="store_true", help="start hidden in the system tray")
     p.add_argument("--debug", action="store_true", help="verbose logging")
-    p.add_argument("--no-update", action="store_true", help="don't check GitHub for Nebula updates this session")
+    p.add_argument("--no-update", action="store_true", help="don't check GitHub for Super Nova updates this session")
     p.add_argument("--after-update", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     return p.parse_args(argv)
@@ -62,8 +62,8 @@ def main(argv=None) -> int:
     from PySide6.QtWidgets import QApplication
 
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    QCoreApplication.setApplicationName("nebula")
-    QCoreApplication.setOrganizationName("nebula")
+    QCoreApplication.setApplicationName("supernova")
+    QCoreApplication.setOrganizationName("supernova")
     QGuiApplication.setDesktopFileName(APP_ID)
     # needed by the optional embedded GOG login (QtWebEngine) and harmless otherwise
     QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
@@ -91,7 +91,7 @@ def main(argv=None) -> int:
     app.setWindowIcon(icons.app_icon())
     _install_icon()
     if args.no_update:
-        os.environ["NEBULA_NO_UPDATE"] = "1"
+        os.environ["SUPERNOVA_NO_UPDATE"] = "1"
     services = Services()
     server = QLocalServer()
 
@@ -137,7 +137,7 @@ def main(argv=None) -> int:
     if args.after_update:
         last = services.self_update.state().get("last_update") or {}
         commits = [m for _sha, m in last.get("commits", [])][:3]
-        QTimer.singleShot(1200, lambda: window.toast("Nebula was updated",
+        QTimer.singleShot(1200, lambda: window.toast("Super Nova was updated",
                                                      "\n".join(commits) or "You're on the latest version"))
     if args.minimized or services.settings.get("general.start_minimized"):
         if window.tray is None or not window.tray.isVisible():
@@ -183,12 +183,24 @@ def _install_icon() -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
         if not dst.exists() or dst.read_bytes() != src.read_bytes():
             dst.write_bytes(src.read_bytes())
-        # point the launcher entry at the file itself: desktops cache themed icons by name
         entry = data / "applications" / f"{APP_ID}.desktop"
+        legacy = data / "applications" / f"{LEGACY_APP_ID}.desktop"
+        if legacy.exists() and not entry.exists():  # a menu entry from when the app was called Nebula
+            entry.write_text(legacy.read_text().replace("Name=Nebula", f"Name={APP_NAME}")
+                             .replace("StartupWMClass=nebula", "StartupWMClass=supernova"))
+            legacy.unlink()
+            (dst.parent / f"{LEGACY_APP_ID}.svg").unlink(missing_ok=True)
+        # point the launcher entry at the file itself: desktops cache themed icons by name
         if entry.exists():
             text = entry.read_text()
             fixed = "\n".join(f"Icon={dst}" if line.startswith("Icon=") else line for line in text.splitlines()) + "\n"
             if fixed != text:
                 entry.write_text(fixed)
+    except OSError:
+        pass
+    from nebula.core import autostart
+
+    try:
+        autostart.migrate()
     except OSError:
         pass

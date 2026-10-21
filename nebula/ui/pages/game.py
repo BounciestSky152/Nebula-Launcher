@@ -1101,7 +1101,7 @@ class GamePage(Page):
             r.addWidget(label(human_duration(secs), "Subtle"))
             self.act_list.addLayout(r)
         if not rows and e.playtime_minutes:
-            self.act_list.addWidget(label("Play time was imported from your platforms; sessions played through Nebula "
+            self.act_list.addWidget(label("Play time was imported from your platforms; sessions played through Super Nova "
                                           "are listed here.", "Faint", wrap=True))
 
     # --------------------------------------------------------------- info

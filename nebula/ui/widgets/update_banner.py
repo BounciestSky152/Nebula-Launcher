@@ -1,4 +1,4 @@
-"""Slim banner under the top bar that reports Nebula self-updates."""
+"""Slim banner under the top bar that reports Super Nova self-updates."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -54,25 +54,25 @@ class UpdateBanner(QFrame):
         self.primary.show()
         self.secondary.show()
         if st == su.AVAILABLE:
-            self.text.setText(f"<b>Nebula update available</b> — {upd.message}")
+            self.text.setText(f"<b>Super Nova update available</b> — {upd.message}")
             manual = upd.mode() == "manual"
             self.primary.setText("View on GitHub" if manual else "Update now")
             self.secondary.setText("Details")
         elif st == su.WAITING:
-            self.text.setText(f"<b>Nebula update ready</b> — {upd.message}")
+            self.text.setText(f"<b>Super Nova update ready</b> — {upd.message}")
             self.primary.setText("Update now")
             self.secondary.hide()
         elif st == su.INSTALLING:
-            self.text.setText(f"<b>Updating Nebula</b> — {upd.message}")
+            self.text.setText(f"<b>Updating Super Nova</b> — {upd.message}")
             self.primary.hide()
             self.secondary.hide()
         else:  # INSTALLED
             n = upd.seconds_to_restart()
             if n >= 0:
-                self.text.setText(f"<b>Nebula was updated.</b> Restarting in {n} s…")
+                self.text.setText(f"<b>Super Nova was updated.</b> Restarting in {n} s…")
                 self.secondary.setText("Later")
             else:
-                self.text.setText(f"<b>Nebula was updated.</b> {upd.message}")
+                self.text.setText(f"<b>Super Nova was updated.</b> {upd.message}")
                 self.secondary.hide()
             self.primary.setText("Restart now")
 

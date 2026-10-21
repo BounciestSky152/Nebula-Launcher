@@ -13,7 +13,7 @@ from nebula import paths
 DEFAULTS: dict[str, Any] = {
     # General
     "general.start_minimized": False,
-    "general.autostart": False,  # start Nebula when the user logs in
+    "general.autostart": False,  # start Super Nova when the user logs in
     "handheld.mode": "off",  # on | off
     "general.close_to_tray": True,
     "general.show_tray": True,
@@ -74,12 +74,12 @@ DEFAULTS: dict[str, Any] = {
     # Friends
     "friends.poll_minutes": 2,
     "friends.notify_playing": True,
-    # Nebula self-updates (from GitHub)
+    # Super Nova self-updates (from GitHub)
     "updates.auto_check": True,
     "updates.auto_install": True,
     "updates.auto_restart": True,
     "updates.interval_minutes": 30,
-    "updates.repo": "BounciestSky152/Nebula-Launcher",
+    "updates.repo": "BounciestSky152/Super-Nova-Launcher",
     "updates.branch": "main",
     "updates.github_token": "",
     "appearance.theme": "nebula",  # nebula | classic
@@ -112,6 +112,8 @@ class Settings:
                 self._data = json.loads(self._path.read_text())
             except (OSError, ValueError):
                 self._data = {}
+            if str(self._data.get("updates.repo", "")).lower() == "bounciestsky152/nebula-launcher":
+                self._data["updates.repo"] = DEFAULTS["updates.repo"]  # the repository was renamed
 
     def save(self) -> None:
         with self._lock:

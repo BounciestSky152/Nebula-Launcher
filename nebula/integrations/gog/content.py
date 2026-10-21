@@ -620,7 +620,7 @@ def install_dependencies(api: GogApi, ctx: JobContext, session: requests.Session
     """Download the redistributables a build depends on.
 
     Global redistributables (``__redist/...``: MSVC, DirectX, .NET...) are shared
-    between games in Nebula's redist folder and installed into each Proton prefix
+    between games in Super Nova's redist folder and installed into each Proton prefix
     on first launch. Game-local dependencies are written into the game folder.
     """
     if not dep_ids:

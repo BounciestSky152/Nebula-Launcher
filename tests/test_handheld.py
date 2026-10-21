@@ -153,8 +153,10 @@ def test_big_picture_settings(qapp, services, errors):
     for other in QApplication.topLevelWidgets():  # windows and dialogs left over by earlier tests take the keys
         if other is not w and other.isVisible():
             other.hide()
-    QApplication.setActiveWindow(w)
-    pump(qapp)
+    w.windowHandle().requestActivate()
+    end = time.time() + 3
+    while QApplication.activeWindow() is not w and time.time() < end:
+        pump(qapp, 0.05)
     page = w.pages["handheld_settings"]
 
     def press(key, seconds=0.12):

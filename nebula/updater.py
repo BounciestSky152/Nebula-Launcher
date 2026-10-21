@@ -1,4 +1,4 @@
-"""Self-updater: keeps Nebula in sync with its GitHub repository.
+"""Self-updater: keeps Super Nova in sync with its GitHub repository.
 
 Only files the app actually needs at runtime are considered: the ``nebula/``
 package and ``pyproject.toml`` (dependencies). Commits that only touch the
@@ -37,7 +37,8 @@ import requests
 
 log = logging.getLogger(__name__)
 
-DEFAULT_REPO = "BounciestSky152/Nebula-Launcher"
+DEFAULT_REPO = "BounciestSky152/Super-Nova-Launcher"
+LEGACY_REPOS = ("BounciestSky152/Nebula-Launcher",)  # the repository before the rename
 DEFAULT_BRANCH = "main"
 API_BASE = "https://api.github.com"
 CODELOAD_BASE = "https://codeload.github.com"
@@ -48,9 +49,9 @@ DEPENDENCY_FILE = "pyproject.toml"
 
 
 def find_token(configured: str = "") -> str:
-    """A GitHub token for private repositories: the setting, then $NEBULA_GITHUB_TOKEN / $GITHUB_TOKEN /
+    """A GitHub token for private repositories: the setting, then $SUPERNOVA_GITHUB_TOKEN / $GITHUB_TOKEN /
     $GH_TOKEN, then the GitHub CLI's login (``gh auth token``)."""
-    for value in (configured, os.environ.get("NEBULA_GITHUB_TOKEN"), os.environ.get("GITHUB_TOKEN"),
+    for value in (configured, os.environ.get("SUPERNOVA_GITHUB_TOKEN"), os.environ.get("NEBULA_GITHUB_TOKEN"), os.environ.get("GITHUB_TOKEN"),
                   os.environ.get("GH_TOKEN")):
         if value and value.strip():
             return value.strip()
@@ -167,7 +168,8 @@ class Updater:
                 url = self._git("remote", "get-url", "origin").strip().lower()
             except UpdateError:
                 url = ""
-            if self.repo.lower() in url.removesuffix(".git") or self.repo.lower() + ".git" in url:
+            url = url.removesuffix(".git")
+            if any(repo.lower() in url for repo in (self.repo, *LEGACY_REPOS)):  # old clones keep the old URL
                 return "git"
         site_dirs = {p for p in sys.path if p.endswith("site-packages")}
         in_site = any(str(self.package_dir).startswith(s) for s in site_dirs)
@@ -371,7 +373,7 @@ class Updater:
         archive.unlink()
         dirs = [p for p in target.iterdir() if p.is_dir()]
         if len(dirs) != 1 or not (dirs[0] / PACKAGE / "__init__.py").is_file():
-            raise UpdateError("The downloaded update does not look like Nebula")
+            raise UpdateError("The downloaded update does not look like Super Nova")
         src = dirs[0]
         # integrity: every runtime file must match the commit's tree
         expected = {p: s for p, s in self.remote_tree(info.remote_sha).items() if is_runtime_path(p)}
@@ -389,7 +391,7 @@ class Updater:
             self._fast_forward()
             result = f"Fast-forwarded to {info.remote_sha[:7]}"
         elif mode == "manual":
-            raise UpdateError("This installation is read-only; reinstall Nebula to update")
+            raise UpdateError("This installation is read-only; reinstall Super Nova to update")
         else:
             source = source or self.download(info)
             if mode == "pip":

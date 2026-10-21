@@ -1,4 +1,4 @@
-"""Background service that keeps Nebula itself up to date from GitHub."""
+"""Background service that keeps Super Nova itself up to date from GitHub."""
 from __future__ import annotations
 
 import logging
@@ -53,7 +53,7 @@ class SelfUpdateService(QObject):
         return self._updater
 
     def enabled(self) -> bool:
-        return not os.environ.get("NEBULA_NO_UPDATE")
+        return not (os.environ.get("SUPERNOVA_NO_UPDATE") or os.environ.get("NEBULA_NO_UPDATE"))
 
     def _setting_changed(self, key: str, _value) -> None:
         if key == "updates.interval_minutes" and self.timer.isActive():
@@ -111,29 +111,29 @@ class SelfUpdateService(QObject):
         self._busy = False
         if info is None:
             self.info = None
-            self._set(UP_TO_DATE, "Nebula is up to date")
+            self._set(UP_TO_DATE, "Super Nova is up to date")
             if manual:
-                self.s.bus.notify.emit("Nebula", "You have the latest version")
+                self.s.bus.notify.emit("Super Nova", "You have the latest version")
             return
         self.info = info
         summary = info.summary()
         if self.mode() == "manual":
             self._set(AVAILABLE, f"An update is available ({summary}). This installation is read-only — "
-                                 "reinstall Nebula to update.")
+                                 "reinstall Super Nova to update.")
             return
         if self.settings.get("updates.auto_install") or manual:
             self._set(AVAILABLE, f"Update found: {summary}")
             self.install()
         else:
             self._set(AVAILABLE, f"An update is available: {summary}")
-            self.s.bus.notify.emit("Nebula update available", summary)
+            self.s.bus.notify.emit("Super Nova update available", summary)
 
     def _failed(self, exc: BaseException, manual: bool) -> None:
         self._busy = False
         log.info("Update check failed: %s", exc)
         self._set(ERROR, f"Update check failed: {exc}")
         if manual:
-            self.s.bus.error.emit("Nebula update", str(exc))
+            self.s.bus.error.emit("Super Nova update", str(exc))
 
     # ---------------------------------------------------------- install
     def busy_with_games(self) -> bool:
@@ -160,18 +160,18 @@ class SelfUpdateService(QObject):
 
     def _installed(self, result: str) -> None:
         self._busy = False
-        self._set(INSTALLED, f"{result}. Restart Nebula to use the new version.")
-        self.s.db.log_activity("update", f"Nebula updated ({result})")
+        self._set(INSTALLED, f"{result}. Restart Super Nova to use the new version.")
+        self.s.db.log_activity("update", f"Super Nova updated ({result})")
         if self.settings.get("updates.auto_restart"):
             self.schedule_restart()
         else:
-            self.s.bus.notify.emit("Nebula updated", "Restart Nebula to use the new version")
+            self.s.bus.notify.emit("Super Nova updated", "Restart Super Nova to use the new version")
 
     def _install_failed(self, exc: BaseException) -> None:
         self._busy = False
         log.warning("Update install failed: %s", exc)
         self._set(ERROR, f"Update failed: {exc}")
-        self.s.bus.error.emit("Nebula update failed", str(exc))
+        self.s.bus.error.emit("Super Nova update failed", str(exc))
 
     # ---------------------------------------------------------- restart
     def schedule_restart(self, delay: int = RESTART_DELAY) -> None:

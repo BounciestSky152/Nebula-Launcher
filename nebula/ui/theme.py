@@ -1,33 +1,37 @@
-"""Dark, GOG Galaxy 2.0-inspired theme."""
+"""GOG Galaxy 2.0-inspired themes: the dark Nebula (and Classic) and the light Super Nova."""
 from __future__ import annotations
 
 from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import QApplication
 
-BG = "#16161b"
-SIDEBAR = "#0f0f13"
-SURFACE = "#1e1e25"
-SURFACE2 = "#262630"
-SURFACE3 = "#30303c"
-BORDER = "#2b2b36"
-TEXT = "#e9e9f0"
-TEXT_DIM = "#a0a0b0"
-TEXT_FAINT = "#6c6c7c"
-ACCENT = "#7b4fc4"
-ACCENT_HOVER = "#8c62d4"
-ACCENT_PRESSED = "#6a40ad"
-ACCENT_SOFT = "#2a2335"
-SUCCESS = "#4fbf73"
-WARNING = "#e3a63b"
-DANGER = "#e25c5c"
-INFO = "#4aa3df"
-# translucent "glass" surfaces that let the starfield show through
-GLASS = "rgba(16, 16, 20, 0.82)"
-GLASS_DARK = "rgba(13, 13, 17, 0.88)"
-GLASS_CARD = "rgba(26, 26, 32, 0.86)"
-GLASS_BORDER = "rgba(255, 255, 255, 0.07)"
+# Nebula (and Classic) are dark; Super Nova is the light theme: a bright sky with every colour of an exploding star
+PALETTES = {
+    "dark": {
+        "BG": "#16161b", "SIDEBAR": "#0f0f13", "SURFACE": "#1e1e25", "SURFACE2": "#262630", "SURFACE3": "#30303c",
+        "BORDER": "#2b2b36", "TEXT": "#e9e9f0", "TEXT_DIM": "#a0a0b0", "TEXT_FAINT": "#6c6c7c",
+        "ACCENT": "#7b4fc4", "ACCENT_HOVER": "#8c62d4", "ACCENT_PRESSED": "#6a40ad", "ACCENT_SOFT": "#2a2335",
+        "SUCCESS": "#4fbf73", "WARNING": "#e3a63b", "DANGER": "#e25c5c", "INFO": "#4aa3df",
+        # translucent "glass" surfaces that let the starfield show through
+        "GLASS": "rgba(16, 16, 20, 0.82)", "GLASS_DARK": "rgba(13, 13, 17, 0.88)",
+        "GLASS_CARD": "rgba(26, 26, 32, 0.86)", "GLASS_BORDER": "rgba(255, 255, 255, 0.07)",
+    },
+    "light": {
+        "BG": "#fbf6ff", "SIDEBAR": "#f4ecff", "SURFACE": "#ffffff", "SURFACE2": "#f6effe", "SURFACE3": "#ece0fb",
+        "BORDER": "#e6d8f6", "TEXT": "#1e1233", "TEXT_DIM": "#5a4d74", "TEXT_FAINT": "#8f84a8",
+        "ACCENT": "#e8338a", "ACCENT_HOVER": "#f2559f", "ACCENT_PRESSED": "#c41f6f", "ACCENT_SOFT": "#ffe3f0",
+        "SUCCESS": "#17a35b", "WARNING": "#e07a00", "DANGER": "#e0353f", "INFO": "#1e88e5",
+        "GLASS": "rgba(255, 255, 255, 0.78)", "GLASS_DARK": "rgba(255, 250, 255, 0.86)",
+        "GLASS_CARD": "rgba(255, 255, 255, 0.84)", "GLASS_BORDER": "rgba(120, 50, 170, 0.14)",
+    },
+}
+PALETTE = "dark"
+# the colours as module constants, read by painted widgets; use_palette() swaps them
+BG = SIDEBAR = SURFACE = SURFACE2 = SURFACE3 = BORDER = TEXT = TEXT_DIM = TEXT_FAINT = ""
+ACCENT = ACCENT_HOVER = ACCENT_PRESSED = ACCENT_SOFT = SUCCESS = WARNING = DANGER = INFO = ""
+GLASS = GLASS_DARK = GLASS_CARD = GLASS_BORDER = ""
+globals().update(PALETTES[PALETTE])
 
-QSS = f"""
+QSS_TEMPLATE = """
 * {{
     outline: none;
 }}
@@ -492,9 +496,10 @@ QGroupBox::title {{
 }}
 QSplitter::handle {{ background: {BORDER}; }}
 """
+QSS = QSS_TEMPLATE.format(**PALETTES[PALETTE])
 
 
-# fonts picked in Settings › General › Appearance ("" = system font); Audiowide and Orbitron ship with Nebula
+# fonts picked in Settings › General › Appearance ("" = system font); Audiowide and Orbitron ship with Super Nova
 FONTS = {"ui": "", "display": "Audiowide", "sidebar": "Orbitron"}
 _base_font: QFont | None = None
 _fonts_loaded = False
@@ -526,7 +531,7 @@ QPushButton:focus { border: 2px solid #b79cff; }
     { border: 2px solid #b79cff; background: rgba(140, 98, 212, 0.18); }
 *[controllerForm="true"] QTabBar::tab:selected:focus { background: rgba(140, 98, 212, 0.35); border-radius: 6px; }
 """
-MODE = "nebula"  # "nebula" (space-styled sidebar, bundled fonts) | "classic" (the original look)
+MODE = "nebula"  # "nebula" (space-styled sidebar, bundled fonts) | "supernova" (light) | "classic" (the original look)
 CLASSIC_QSS = """
 #Sidebar { background: rgba(8, 7, 18, 0.72); border-right: 1px solid rgba(160, 140, 255, 0.14); }
 QPushButton#SidebarButton:hover { background: #1e1e25; }
@@ -536,8 +541,37 @@ QPushButton#SidebarButton:checked { background: #2c2142; }
 """
 
 
+# the light theme on top of the shared style sheet: buttons and highlights in supernova colours
+SUPERNOVA_QSS = """
+QPushButton#Primary, QPushButton[primary="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff3d8b, stop:0.55 #ff7a3d, stop:1 #ffb000);
+    color: white; border: none;
+}
+QPushButton#Primary:hover, QPushButton[primary="true"]:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff5aa0, stop:0.55 #ff9257, stop:1 #ffc233);
+}
+QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7b2ff7, stop:0.5 #ff3d8b,
+    stop:1 #ffb000); }
+"""
+
+
 def classic() -> bool:
     return MODE == "classic"
+
+
+def light() -> bool:
+    return PALETTE == "light"
+
+
+def use_palette(name: str) -> bool:
+    """Switch the colour constants and the style sheet to ``name`` ("dark" | "light"); True when it changed."""
+    global PALETTE, QSS
+    if name == PALETTE or name not in PALETTES:
+        return False
+    PALETTE = name
+    globals().update(PALETTES[name])
+    QSS = QSS_TEMPLATE.format(**PALETTES[name])
+    return True
 
 
 def font(role: str, point_size: float = 10) -> QFont:
@@ -552,11 +586,13 @@ def font(role: str, point_size: float = 10) -> QFont:
 def set_fonts(app: QApplication, ui: str = "", display: str = "", sidebar: str = "", mode: str | None = None) -> None:
     global MODE
     MODE = mode or MODE
+    if use_palette("light" if MODE == "supernova" else "dark"):
+        _qt_palette(app)
     FONTS.update(ui=ui or "", display=display or "", sidebar=sidebar or "")
     load_fonts()
     size = _base_font.pointSizeF() if _base_font is not None else 10
     app.setFont(font("ui", size + 3 if HANDHELD else size))
-    rules = [CLASSIC_QSS] if classic() else []
+    rules = [CLASSIC_QSS] if classic() else [SUPERNOVA_QSS] if light() else []
     if HANDHELD:
         rules.append(HANDHELD_QSS)
     if FONTS["display"] and not classic():
@@ -566,8 +602,7 @@ def set_fonts(app: QApplication, ui: str = "", display: str = "", sidebar: str =
     app.setStyleSheet(QSS + "\n".join(rules))
 
 
-def apply(app: QApplication) -> None:
-    app.setStyle("Fusion")
+def _qt_palette(app: QApplication) -> None:
     pal = QPalette()
     pal.setColor(QPalette.ColorRole.Window, QColor(BG))
     pal.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
@@ -578,11 +613,18 @@ def apply(app: QApplication) -> None:
     pal.setColor(QPalette.ColorRole.ButtonText, QColor(TEXT))
     pal.setColor(QPalette.ColorRole.Highlight, QColor(ACCENT))
     pal.setColor(QPalette.ColorRole.HighlightedText, QColor("white"))
+    pal.setColor(QPalette.ColorRole.Light, QColor(SURFACE3))
+    pal.setColor(QPalette.ColorRole.Mid, QColor(BORDER))
     pal.setColor(QPalette.ColorRole.ToolTipBase, QColor(SURFACE2))
     pal.setColor(QPalette.ColorRole.ToolTipText, QColor(TEXT))
     pal.setColor(QPalette.ColorRole.PlaceholderText, QColor(TEXT_FAINT))
     pal.setColor(QPalette.ColorRole.Link, QColor(ACCENT_HOVER))
     app.setPalette(pal)
+
+
+def apply(app: QApplication) -> None:
+    app.setStyle("Fusion")
+    _qt_palette(app)
     f = app.font()
     if f.pointSize() < 10:
         f.setPointSize(10)

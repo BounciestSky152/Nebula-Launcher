@@ -62,7 +62,7 @@ class GogLoginDialog(QDialog):
             go.clicked.connect(lambda: self._submit(self.code.text()))
             self.code.returnPressed.connect(lambda: self._submit(self.code.text()))
             pl.addWidget(go, 0, Qt.AlignmentFlag.AlignRight)
-            pl.addWidget(label("Tip: install PySide6-Addons to sign in inside Nebula.", "Faint"))
+            pl.addWidget(label("Tip: install PySide6-Addons to sign in inside Super Nova.", "Faint"))
             pl.addStretch(1)
             self.stack.addWidget(page)
 

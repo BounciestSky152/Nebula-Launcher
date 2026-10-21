@@ -12,7 +12,7 @@ from nebula.core.utils import slugify
 
 
 def launcher_command() -> str:
-    exe = shutil.which("nebula")
+    exe = shutil.which("supernova") or shutil.which("nebula")  # "nebula": installs from before the rename
     if exe:
         return exe
     return f"{sys.executable} -m nebula"
@@ -38,7 +38,7 @@ def desktop_entry(uid: str, title: str, icon: str) -> str:
         "[Desktop Entry]\n"
         "Type=Application\n"
         f"Name={title}\n"
-        f"Comment=Play {title} with Nebula\n"
+        f"Comment=Play {title} with Super Nova\n"
         f"Exec={launcher_command()} --launch {uid}\n"
         f"Icon={icon}\n"
         "Terminal=false\n"

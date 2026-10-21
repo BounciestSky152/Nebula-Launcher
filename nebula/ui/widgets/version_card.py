@@ -88,7 +88,7 @@ def _offer(v: VersionView, info, text: str, version: str = "", change: str = "up
 def _staying(v: VersionView, mine: str) -> None:
     v.pill_text, v.pill_obj = f"Staying on {mine}", "Faint"
     v.newest_obj = "Faint"
-    v.status_text = f"You're staying on {mine}, so Nebula won't offer updates for this game."
+    v.status_text = f"You're staying on {mine}, so Super Nova won't offer updates for this game."
 
 
 def _builds_state(v: VersionView, info, store: str) -> None:
@@ -136,7 +136,7 @@ def _builds_state(v: VersionView, info, store: str) -> None:
     elif st == "unlisted":  # an imported copy: no way to tell whether it is older or newer
         v.newest_text = newest
         v.newest_sub = released
-        v.status_text = ("Nebula couldn't match this imported copy to a GOG build. Use Change version… to install "
+        v.status_text = ("Super Nova couldn't match this imported copy to a GOG build. Use Change version… to install "
                          "a specific version.")
     else:  # unknown: only a saved summary for another build
         v.newest_text, v.newest_obj = newest, "Faint"
@@ -169,7 +169,7 @@ def _installer_state(v: VersionView, info, store: str) -> None:
             v.newest_obj = "Warning"
         _offer(v, info, download, "", "update", newest, INSTALLER_TIP)
     else:  # unknown: one of the two versions is missing
-        v.status_text = ("Nebula doesn't know which installer version this copy came from." if not inst.version
+        v.status_text = ("Super Nova doesn't know which installer version this copy came from." if not inst.version
                          else f"{store} doesn't say which version its current installer is.")
         _offer(v, info, download, "", "update", newest, INSTALLER_TIP)
         v.update_primary = False
@@ -213,7 +213,7 @@ def describe_version(info, *, loading: bool = False, busy: str = "", global_auto
         v.auto_tip = "Turn off “Stay on this version” to allow automatic updates."
 
     if info.kind not in ("builds", "installer"):
-        v.status_text = "Nebula can't manage versions for this copy."
+        v.status_text = "Super Nova can't manage versions for this copy."
         v.refresh_visible = v.toggles_visible = False
         return v
     if info.status == "not_installed":
@@ -258,7 +258,7 @@ def describe_version(info, *, loading: bool = False, busy: str = "", global_auto
 
 
 def _not_installed_state(v: VersionView, info, store: str, loading: bool) -> None:
-    """A game that isn't installed: what Nebula would install, and an Install button."""
+    """A game that isn't installed: what Super Nova would install, and an Install button."""
     latest = info.latest
     v.installed_text, v.installed_sub, v.chip_text = "Not installed", "", ""
     v.toggles_visible = v.change_visible = False

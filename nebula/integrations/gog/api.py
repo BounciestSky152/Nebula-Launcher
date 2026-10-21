@@ -232,7 +232,7 @@ class GogApi:
         return r.status_code in (200, 201, 204)
 
     def set_presence(self, game_id: str | None, version: str) -> bool:
-        payload = {"application_type": "Nebula", "force_update": False, "presence": "online", "version": version}
+        payload = {"application_type": "Super Nova", "force_update": False, "presence": "online", "version": version}
         if game_id:
             payload["game_id"] = game_id
         r = self.session.post(f"{PRESENCE}/users/{self.auth.user_id}/status", json=payload,

@@ -2,7 +2,7 @@
 
 Owned and installed games are read from Legendary's metadata. Games are
 launched with ``legendary launch --no-wine --wrapper <Proton>`` so they run
-through Nebula's Proton runner (with Epic authentication handled by
+through Super Nova's Proton runner (with Epic authentication handled by
 Legendary); games managed by Heroic can alternatively be handed to Heroic.
 """
 from __future__ import annotations
@@ -243,7 +243,7 @@ class EpicIntegration(Integration):
         base_dir = Path(self.settings.get("library.install_dir")) / "Epic"
         return InstallOptions(platforms=["windows"], platform="windows", install_dir=str(base_dir / sanitize_dirname(game.title)),
                               method="Legendary (runs with Proton)",
-                              notes=["Downloaded by Legendary; launched through Proton by Nebula."])
+                              notes=["Downloaded by Legendary; launched through Proton by Super Nova."])
 
     def install(self, game: Game, request: InstallRequest, ctx: JobContext) -> Game:
         base_dir = Path(request.base_dir or Path(self.settings.get("library.install_dir")) / "Epic")

@@ -5,11 +5,12 @@ import math
 import random
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, QStringListModel, Qt, QTimer, Signal
-from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap,
-                           QRadialGradient)
+from PySide6.QtGui import (QBrush, QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen,
+                           QPixmap, QRadialGradient)
 from PySide6.QtWidgets import (QButtonGroup, QCompleter, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton,
                                QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 
+from nebula import APP_NAME
 from nebula.core.utils import xdg_open
 from nebula.ui import icons, theme
 from nebula.ui.widgets.common import Avatar, Spinner, icon_button, label
@@ -92,7 +93,7 @@ class SectionHeader(QWidget):
 
 
 class BrandMark(QWidget):
-    """The sidebar logo: a ringed planet and NEBULA in starlight lettering."""
+    """The sidebar logo: a ringed planet and the app's name in starlight lettering."""
 
     def __init__(self):
         super().__init__()
@@ -132,11 +133,16 @@ class BrandMark(QWidget):
         p.drawArc(QRectF(-19, -6, 38, 12), 180 * 16, 180 * 16)
         p.restore()
         _sparkle(p, QPointF(52, 15), 3, QColor(255, 255, 255, 220))
-        f = theme.font("display", 15)
-        f.setWeight(QFont.Weight.Black)
-        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 3.5)
+        size, name = 15.0, APP_NAME.upper()
+        while True:  # the name in the biggest lettering that fits beside the planet
+            f = theme.font("display", size)
+            f.setWeight(QFont.Weight.Black)
+            f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, size * 0.2)
+            if size <= 9 or QFontMetricsF(f).horizontalAdvance(name) <= self.width() - 74:
+                break
+            size -= 0.5
         path = QPainterPath()
-        path.addText(QPointF(62, 33), f, "NEBULA")
+        path.addText(QPointF(62, 33), f, name)
         g = QLinearGradient(62, 16, 200, 34)
         g.setColorAt(0, QColor(255, 255, 255))
         g.setColorAt(0.55, QColor(206, 188, 255))
@@ -754,7 +760,7 @@ class TopBar(QWidget):
         else:
             m.addAction(icons.icon("user"), "Sign in with GOG…", self.ctl.gog_login)
         m.addSeparator()
-        m.addAction(icons.icon("power"), "Quit Nebula", self.win.quit_app)
+        m.addAction(icons.icon("power"), "Quit Super Nova", self.win.quit_app)
         m.exec(self.avatar_btn.mapToGlobal(self.avatar_btn.rect().bottomLeft()))
 
     def _sync(self, *_a) -> None:

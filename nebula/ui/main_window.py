@@ -149,15 +149,20 @@ class MainWindow(QMainWindow):
         st = self.s.settings
         fonts = (st.get("appearance.font_ui") or "", st.get("appearance.font_display") or "",
                  st.get("appearance.font_sidebar") or "")
-        mode = "classic" if st.get("appearance.theme") == "classic" else "nebula"
+        mode = st.get("appearance.theme") if st.get("appearance.theme") in ("classic", "supernova") else "nebula"
         handheld = st.get("handheld.mode") == "on"
         if handheld != theme.HANDHELD:
             theme.HANDHELD = handheld
             theme.MODE = ""  # force the style sheet to be rebuilt below
             self._set_handheld(handheld)
-        self.starfield.set_classic(mode == "classic")
+        if handheld and mode == "supernova":
+            mode = "nebula"  # Big Picture's screens are made for a dark sky
+        was_light = theme.light()
+        self.starfield.set_variant(mode)
         if fonts != (theme.FONTS["ui"], theme.FONTS["display"], theme.FONTS["sidebar"]) or mode != theme.MODE:
             theme.set_fonts(QApplication.instance(), *fonts, mode=mode)
+            if theme.light() != was_light and self.isVisible() and not handheld:
+                self.toast("Theme", f"Restart {APP_NAME} to finish switching every screen to the new colours.")
             self.sidebar.orbit.arrange()
             for w in self.sidebar.findChildren(QWidget) + [self.sidebar]:
                 w.update()
@@ -387,7 +392,7 @@ class MainWindow(QMainWindow):
             self.hide()
             if not self.s.db.kv_get("ui.tray_hint_shown"):
                 self.s.db.kv_set("ui.tray_hint_shown", True)
-                self._desktop_notify(APP_NAME, "Nebula keeps running in the tray. Use Quit to exit.")
+                self._desktop_notify(APP_NAME, "Super Nova keeps running in the tray. Use Quit to exit.")
             return
         self.quit_app()
 

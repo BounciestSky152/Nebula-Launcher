@@ -525,6 +525,10 @@ class Starfield(QWidget):
             self._stop_effects()
         self.update()
 
+    def set_variant(self, mode: str) -> None:
+        """The sky for a theme: "nebula", "classic" or "supernova" (the light theme)."""
+        self.set_classic(mode == "classic")
+
     def set_classic(self, on: bool) -> None:
         if on != self.classic:
             self.classic = on

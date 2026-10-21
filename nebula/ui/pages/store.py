@@ -370,7 +370,7 @@ class StorePage(Page):
         if data.get("_login"):
             self.status.setText("Sign in to GOG to see your wishlist.")
         elif data.get("_private"):
-            self.status.setText("GOG doesn't share your wishlist with Nebula.")
+            self.status.setText("GOG doesn't share your wishlist with Super Nova.")
         elif reset and not products:
             self.status.setText("Your wishlist is empty." if self.wishlist_mode else "No products found.")
         elif reset:

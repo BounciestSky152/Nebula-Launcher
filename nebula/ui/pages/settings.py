@@ -171,6 +171,7 @@ class SettingsPage(Page):
         th = QComboBox()
         th.setMaximumWidth(260)
         th.addItem("Nebula", "nebula")
+        th.addItem("Super Nova (light)", "supernova")
         th.addItem("Classic (the original look)", "classic")
         th.setCurrentIndex(max(0, th.findData(self.st.get("appearance.theme") or "nebula")))
         th.currentIndexChanged.connect(lambda _i: self.st.set("appearance.theme", th.currentData()))
@@ -192,15 +193,15 @@ class SettingsPage(Page):
         lay.addWidget(ga)
         g, f = self.group("Application")
         f.addRow(self.check("general.show_tray", "Show icon in the system tray"))
-        f.addRow(self.check("general.close_to_tray", "Closing the window keeps Nebula running in the tray"))
-        f.addRow(self.check("general.autostart", "Start Nebula when I log in"))
+        f.addRow(self.check("general.close_to_tray", "Closing the window keeps Super Nova running in the tray"))
+        f.addRow(self.check("general.autostart", "Start Super Nova when I log in"))
         f.addRow(self.check("general.start_minimized", "Start minimised"))
         self.handheld_combo = self.combo("handheld.mode", [
             ("off", "Off"), ("on", "On (controller-first, fullscreen)")])
         f.addRow("Handheld mode", self.handheld_combo)
         f.addRow(self.check("general.notifications", "Desktop notifications"))
         f.addRow("When a game starts", self.combo("general.launch_behaviour", [
-            ("keep", "Keep Nebula open"), ("minimize", "Minimise Nebula"), ("hide", "Hide to tray")]))
+            ("keep", "Keep Super Nova open"), ("minimize", "Minimise Super Nova"), ("hide", "Hide to tray")]))
         f.addRow("Game language", self.combo("general.language", LANGUAGES))
         lay.addWidget(g)
         g2, f2 = self.group("Friends")
@@ -278,10 +279,10 @@ class SettingsPage(Page):
     def _refresh_updates(self) -> None:
         upd = self.s.self_update
         sha = upd.installed_sha()
-        self.upd_version.setText(f"Nebula {self._version}" + (f"  \u2022  commit {sha[:7]}" if sha else ""))
+        self.upd_version.setText(f"Super Nova {self._version}" + (f"  \u2022  commit {sha[:7]}" if sha else ""))
         self.upd_mode.setText({
             "git": "Git checkout \u2014 updates are fast-forward pulls",
-            "pip": "Installed with scripts/install.sh \u2014 updates reinstall the new source into Nebula's venv",
+            "pip": "Installed with scripts/install.sh \u2014 updates reinstall the new source into Super Nova's venv",
             "files": "Source folder \u2014 changed files are replaced in place",
             "manual": "Read-only installation \u2014 you'll be told when an update exists",
         }.get(upd.mode(), upd.mode()))
@@ -320,7 +321,7 @@ class SettingsPage(Page):
         lay.addWidget(g)
         g2, f2 = self.group("Play time")
         f2.addRow(self.check("library.detect_external_sessions",
-                             "Track play time for games started outside Nebula (process detection)"))
+                             "Track play time for games started outside Super Nova (process detection)"))
         lay.addWidget(g2)
         g3, f3 = self.group("List view columns")
         cols = self.st.get("library.list_columns")
@@ -499,7 +500,7 @@ class SettingsPage(Page):
         if not r:
             return
         if not r.removable:
-            QMessageBox.information(self, "Remove", "Only builds downloaded by Nebula can be removed here.")
+            QMessageBox.information(self, "Remove", "Only builds downloaded by Super Nova can be removed here.")
             return
         if QMessageBox.question(self, "Remove", f"Remove {r.name}?") == QMessageBox.StandardButton.Yes:
             runner_manager.remove_proton(r.path)
@@ -570,7 +571,7 @@ class SettingsPage(Page):
         pb = button("Open plugins folder", "puzzle")
         pb.clicked.connect(lambda: xdg_open(str(paths.plugins_dir())))
         plug.addWidget(pb)
-        plug.addWidget(label("Drop integration plugins (.py) here and restart Nebula — see "
+        plug.addWidget(label("Drop integration plugins (.py) here and restart Super Nova — see "
                              "docs/examples/example_plugin.py.", "Faint", wrap=True), 1)
         lay.addLayout(plug)
         lay.addStretch(1)
@@ -606,7 +607,7 @@ class SettingsPage(Page):
     # -------------------------------------------------------------- about
     def _about(self) -> QWidget:
         w, lay = self._page()
-        lay.addWidget(label(f"Nebula {__version__}", "SectionTitle"))
+        lay.addWidget(label(f"Super Nova {__version__}", "SectionTitle"))
         lay.addWidget(label("A unified game launcher for Linux inspired by GOG Galaxy 2.0. Not affiliated with "
                             "GOG sp. z o.o., Valve, Epic Games or Lutris.", "Subtle", wrap=True))
         for text, path in (("Configuration", paths.config_dir()), ("Data (prefixes, Proton, manifests)", paths.data_dir()),

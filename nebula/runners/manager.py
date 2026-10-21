@@ -100,7 +100,7 @@ def install_ge_proton(ctx: JobContext, release: dict) -> str:
 
 
 def install_umu(ctx: JobContext) -> str:
-    """Job function: install the umu-launcher zipapp into Nebula's runner directory."""
+    """Job function: install the umu-launcher zipapp into Super Nova's runner directory."""
     s = _session()
     ctx.stage("Looking up latest umu-launcher")
     rel = s.get(UMU_LATEST, timeout=20)
@@ -130,7 +130,7 @@ def install_umu(ctx: JobContext) -> str:
 def remove_proton(path: str) -> None:
     p = Path(path).resolve()
     if paths.proton_dir().resolve() not in p.parents:
-        raise ValueError("Only Proton builds downloaded by Nebula can be removed")
+        raise ValueError("Only Proton builds downloaded by Super Nova can be removed")
     shutil.rmtree(p)
 
 

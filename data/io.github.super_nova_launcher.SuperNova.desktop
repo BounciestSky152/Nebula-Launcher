@@ -1,16 +1,16 @@
 [Desktop Entry]
 Type=Application
-Name=Nebula
+Name=Super Nova
 GenericName=Game Launcher
 Comment=All your games in one library - GOG, Steam, Epic, Lutris - with Proton for Windows games
-Exec=nebula %U
-Icon=io.github.nebula_launcher.Nebula
+Exec=supernova %U
+Icon=io.github.super_nova_launcher.SuperNova
 Terminal=false
 Categories=Game;
-Keywords=games;launcher;gog;galaxy;steam;epic;proton;wine;
-StartupWMClass=nebula
+Keywords=games;supernova;nebula;launcher;gog;galaxy;steam;epic;proton;wine;
+StartupWMClass=supernova
 Actions=Minimized;
 
 [Desktop Action Minimized]
 Name=Start in the tray
-Exec=nebula --minimized
+Exec=supernova --minimized

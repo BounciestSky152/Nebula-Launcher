@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 # isolate every test session from the real user configuration
-os.environ["NEBULA_HOME"] = tempfile.mkdtemp(prefix="nebula-test-")
+os.environ["SUPERNOVA_HOME"] = tempfile.mkdtemp(prefix="nebula-test-")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ["NEBULA_NO_UPDATE"] = "1"  # never self-update while testing
+os.environ["SUPERNOVA_NO_UPDATE"] = "1"  # never self-update while testing
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
@@ -27,8 +27,8 @@ def qapp():
 
 @pytest.fixture()
 def home(tmp_path, monkeypatch):
-    """A fresh NEBULA_HOME per test."""
-    monkeypatch.setenv("NEBULA_HOME", str(tmp_path / "nebula"))
+    """A fresh SUPERNOVA_HOME per test."""
+    monkeypatch.setenv("SUPERNOVA_HOME", str(tmp_path / "nebula"))
     return tmp_path
 
 
